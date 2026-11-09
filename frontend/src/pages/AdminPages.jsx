@@ -48,7 +48,24 @@ export function Approvals({ data, updateData, onActivate }) {
             ) : (
               <button
                 className={outline}
-                onClick={() =>
+                onClick={async () => {
+                  const approving = !mentor.approved
+                  const activating = mentor.approved && !mentor.active
+                  const deactivating = mentor.approved && mentor.active
+                  try {
+                    if (approving) {
+                      await apiRequest(`/admin/mentors/${mentor.id}/approve`, { method: 'POST' })
+                    } else {
+                      const identifier = mentor.email || mentor.name
+                      await apiRequest(`/admin/users/${encodeURIComponent(identifier)}/status`, { method: 'POST', body: JSON.stringify({ active: activating ? true : false }) })
+                    }
+                  } catch (err) {
+                    alert('Approval could not be saved on the server: ' + err.message)
+                    return
+                  }
+                  if (deactivating) {
+                    alert('Deactivated')
+                  }
                   updateData((current) => ({
                     ...current,
                     mentors: current.mentors.map((item) =>
@@ -56,12 +73,12 @@ export function Approvals({ data, updateData, onActivate }) {
                         ? {
                             ...item,
                             approved: true,
-                            active: !item.approved || !item.active,
+                            active: approving || activating ? true : false,
                           }
                         : item,
                     ),
                   }))
-                }
+                }}
               >
                 {mentor.approved ? (mentor.active ? 'Deactivate' : 'Activate') : 'Approve'}
               </button>

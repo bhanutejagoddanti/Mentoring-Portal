@@ -44,7 +44,8 @@ def create_help_request():
     payload['type'] = ticket_type
     if data.get('urgency_level'):
         payload['urgency'] = data.get('urgency_level')
-    if ticket_type.lower() in ('conduct', 'disciplinary', 'student misconduct', 'student disciplinary'):
+    _tl = ticket_type.lower()
+    if any(k in _tl for k in ('conduct', 'disciplinary', 'misconduct', 'inappropriate')):
         payload['confidential'] = True
     result = svc_create(payload, u)
     return api_response(result, status=201)

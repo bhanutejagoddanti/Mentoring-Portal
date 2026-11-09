@@ -17,6 +17,9 @@ def list_meetings():
     """List meetings visible to the current user."""
     u = current_user()
     items = list(get_state().get('meetings') or [])
+    for m in items:  # normalize legacy frontend `date` key to `scheduled_at`
+        if not m.get('scheduled_at') and m.get('date'):
+            m['scheduled_at'] = m['date']
     if u.get('role') != 'admin':
         items = [m for m in items if m.get('mentor') == u.get('name') or m.get('student') == u.get('name')]
     return api_response(items=items, total=len(items))

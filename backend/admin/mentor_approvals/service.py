@@ -18,6 +18,17 @@ def approve_mentor(mentor_id: int) -> dict:
         return {'error': 'Mentor not found', 'status': 404}
     mentor['approved'] = True
     mentor['active'] = True
+    # Sync the auth profile so the mentor can actually log in (login gate reads user_profiles).
+    if mentor.get('user_id'):
+        try:
+            from extensions import sb
+            sb.table('user_profiles').update({'approved': True, 'active': True}).eq('id', mentor['user_id']).execute()
+        except Exception as exc:
+            try:
+                from flask import current_app
+                current_app.logger.warning('user_profiles approve sync notice: %s', exc)
+            except Exception:
+                pass
     indexed: dict = {}
     try:
         indexed = analyze_and_index_mentor(mentor)

@@ -120,32 +120,22 @@ export default function CommunityPage({ user, data, updateData }) {
     }
   }
 
+  function syncMembership(comm, joined) {
+    const nextCount = joined ? (comm.member_count || 0) + 1 : Math.max(0, (comm.member_count || 1) - 1)
+    setCommunities((prev) =>
+      prev.map((c) => (c.id === comm.id ? { ...c, joined, member_count: nextCount } : c))
+    )
+    setActiveCommunity((prev) => (prev && prev.id === comm.id ? { ...prev, joined, member_count: nextCount } : prev))
+  }
+
   async function handleJoinLeave(comm) {
+    const nextJoined = !comm.joined
     try {
-      if (comm.joined) {
-        await apiRequest(`/communities/${comm.id}/leave`, { method: 'POST' })
-        setCommunities((prev) =>
-          prev.map((c) => (c.id === comm.id ? { ...c, joined: false, member_count: Math.max(0, c.member_count - 1) } : c))
-        )
-      } else {
-        await apiRequest(`/communities/${comm.id}/join`, { method: 'POST' })
-        setCommunities((prev) =>
-          prev.map((c) => (c.id === comm.id ? { ...c, joined: true, member_count: (c.member_count || 0) + 1 } : c))
-        )
-      }
+      await apiRequest(`/communities/${comm.id}/${nextJoined ? 'join' : 'leave'}`, { method: 'POST' })
+      syncMembership(comm, nextJoined)
     } catch (err) {
       // Local fallback for optimistic update
-      setCommunities((prev) =>
-        prev.map((c) =>
-          c.id === comm.id
-            ? {
-                ...c,
-                joined: !c.joined,
-                member_count: c.joined ? Math.max(0, c.member_count - 1) : (c.member_count || 0) + 1,
-              }
-            : c
-        )
-      )
+      syncMembership(comm, nextJoined)
     }
   }
 

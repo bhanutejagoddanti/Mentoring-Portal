@@ -371,7 +371,7 @@ export default function App() {
           {navItems.map((item) => (
             <button
               key={item}
-              onClick={() => setPage(item)}
+              onClick={() => { setPage(item); setSelectedMentor(null) }}
               className={`whitespace-nowrap rounded-xl border-l-2 px-3 py-2.5 text-left text-sm transition ${
                 page === item
                   ? 'border-indigo-400 bg-indigo-500/20 font-semibold text-white'

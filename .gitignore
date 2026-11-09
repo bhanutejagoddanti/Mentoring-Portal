@@ -68,3 +68,4 @@ coverage.xml
 
 # IDE / misc
 .DS_Store
+frontend/node_modules

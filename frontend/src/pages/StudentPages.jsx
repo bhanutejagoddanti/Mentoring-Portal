@@ -319,7 +319,7 @@ export function MyMentorship({ user, data, updateData, onChat }) {
               const date = new FormData(event.currentTarget).get('date')
               updateData((current) => ({
                 ...current,
-                meetings: [...current.meetings, { student: user.name, mentor: request.mentor, date }],
+                meetings: [...current.meetings, { student: user.name, mentor: request.mentor, date, scheduled_at: date }],
               }))
               event.currentTarget.reset()
             }}
