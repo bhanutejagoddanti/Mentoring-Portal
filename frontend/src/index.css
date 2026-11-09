@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.05), 0 10px 30px -14px rgb(15 23 42 / 0.16);
+  --shadow-card-hover: 0 20px 44px -16px rgb(15 23 42 / 0.22), 0 8px 18px -10px rgb(15 23 42 / 0.12);
+  --shadow-pop: 0 28px 60px -20px rgb(15 23 42 / 0.38);
+  --animate-fade-in: fade-in 0.35s ease both;
+  --animate-fade-in-fast: fade-in 0.25s ease both;
+  --animate-slide-up: slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-scale-in: scale-in 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.965) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f6f7fb;
+  color: #0f172a;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+*::-webkit-scrollbar-track { background: transparent; }
+
+.animate-fade-in { animation: var(--animate-fade-in); }
+.animate-fade-in-fast { animation: var(--animate-fade-in-fast); }
+.animate-slide-up { animation: var(--animate-slide-up); }
+.animate-scale-in { animation: var(--animate-scale-in); }
+
+@keyframes ui-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+.animate-breathe { animation: ui-breathe 2s ease-in-out infinite; }
+
+.auth-panel {
+  background: linear-gradient(150deg, #0f172a 0%, #1e1b4b 45%, #4c1d95 100%);
+}
+.auth-panel::after {
+  position: absolute;
+  right: -130px;
+  bottom: -150px;
+  width: 460px;
+  height: 460px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  content: '';
+}
+
+/* Subtle grid/noise feel for hero surfaces */
+.hero-grid {
+  background-image:
+    linear-gradient(rgb(79 70 229 / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(79 70 229 / 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+}

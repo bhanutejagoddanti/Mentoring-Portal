@@ -1,0 +1,70 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Secrets / environment (never commit keys)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python virtual envs (multiple possible names)
+.venv/
+venv/
+env/
+ENV/
+VENV/
+.venv*
+venv*/
+__pypackages__/
+Pipfile
+Pipfile.lock
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+*.whl
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.ruff_cache/
+.tox/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+frontend/dist/
+frontend/build/
+
+# Logs / temp
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# Coverage / artifacts
+.coverage
+htmlcov/
+coverage.xml
+*.tar.gz
+*.zip
+
+# IDE / misc
+.DS_Store
