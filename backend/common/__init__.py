@@ -22,7 +22,10 @@ def __getattr__(name):
     if name == 'notifications_bp':
         from common.notifications.routes import bp
         return bp
+    if name == 'messaging_bp':
+        from common.messaging.routes import bp
+        return bp
     raise AttributeError(name)
 
 
-__all__ = ['auth_bp', 'database_bp', 'communities_bp', 'meetings_bp', 'notifications_bp']
+__all__ = ['auth_bp', 'database_bp', 'communities_bp', 'meetings_bp', 'notifications_bp', 'messaging_bp']

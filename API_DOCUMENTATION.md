@@ -178,7 +178,64 @@ All endpoints are prefixed with `/api`. Error responses use JSON bodies such as
 
 ---
 
-## 9. Terms & State
+## 9. Messaging & Notifications (Communication Platform)
+
+### `GET /api/messaging/inbox`
+
+- **Auth:** Bearer required.
+- **Response:** `200 { items: [...], total }` – DM conversations with last message preview, unread counts, peer info.
+
+### `POST /api/messaging/conversations`
+
+- **Auth:** Bearer required.
+- **Body:** `{ participant_id }`.
+- **Response:** `200 { conversation, created }` – reuses existing DM between the pair when present.
+
+### `GET /api/messaging/conversations/<uuid:conversation_id>`
+
+- **Auth:** Bearer required. Participant-only access.
+
+### `POST /api/messaging/conversations/<uuid:conversation_id>/messages`
+
+- **Auth:** Bearer required. Participant-only.
+- **Body:** `{ content, reply_to_id?, attachments? }`.
+- **Response:** `201 { message }`.
+
+### `POST /api/messaging/conversations/<uuid:conversation_id>/read`
+
+- **Auth:** Bearer required. Marks messages read for the caller; response `200 { conversation_id, unread_count }`.
+
+### `POST /api/messaging/conversations/<uuid:conversation_id>/messages/<uuid:message_id>/reaction`
+
+- **Auth:** Bearer required. Body: `{ reaction }`. Toggle/add reaction.
+
+### `GET /api/messaging/users`
+
+- **Auth:** Bearer required. Query: `q` (name/email search), `role` (student/mentor/admin), `limit`.
+
+### Notifications
+
+- `GET /api/notifications` – list for current user.
+- `POST /api/notifications` – create (internal use).
+- `POST /api/notifications/<uuid:notification_id>/read` – mark read (owner).
+- `POST /api/notifications/read-all` – mark all read.
+- `GET /api/notifications/unread-count` – unread count.
+
+### Community Moderation (Admin)
+
+- `GET /api/admin/community-moderation/reports` – list content reports (optional `?status=`).
+- `POST /api/admin/community-moderation/reports/<uuid:report_id>/status` – Body `{ status, action_note? }`.
+- `POST /api/admin/community-moderation/messages/<int:message_id>/delete` – Body `{ community_id }`.
+
+### Community Messaging Upgrades
+
+- `POST /api/communities/<int:cid>/messages` body now accepts `reply_to_id` and `attachments`.
+- `POST /api/communities/<int:cid>/messages/<int:message_id>/reaction` – Body `{ reaction }`.
+- `GET /api/communities/<int:cid>/members` – active members with roles.
+
+---
+
+## 10. Terms & State
 
 ### `GET /api/terms/current`
 
@@ -195,18 +252,31 @@ All endpoints are prefixed with `/api`. Error responses use JSON bodies such as
 
 ---
 
-## 10. Summary of Implemented vs Missing Endpoints
+## 11. Summary of Implemented vs Missing Endpoints
 
 ### Implemented (Flask routes present)
 
-Auth (5), Health (1), Mentors (3), Mentor admin (2), Mentorship (3), Communities (6), Help (3), Admin (2), Terms (1), State (2) = **30 routes**.
+Auth (5), Health (1), Mentors (3), Mentor admin (2), Mentorship (3), Communities (8), Help (3), Admin (3), Terms (1), State (2), Messaging (7), Notifications (4) = **39 routes**.
 
 ### Missing / Not implemented (planned in SQL but no route)
 
 - Meetings lifecycle endpoints (`/api/meetings`, scheduling, feedback, transcripts, action items, outcomes).
-- Notifications endpoints.
 - Events/registrations/resources dedicated endpoints (communities module only partially covers resources).
 - Mentor availability, mentor expertise, career goals, preference taxonomy, intervention logs dedicated endpoints.
+
+---
+
+## 12. Database Tables – Communication Platform
+
+New tables added in migration `003_communication.sql`:
+
+- `conversations` – type (`direct` | `community`), community_id, created_by, status, timestamps.
+- `conversation_participants` – conversation-scoped membership with role (`owner|admin|moderator|member`) and status, unread count, last read.
+- `direct_messages` – sender, content, reply_to_id, attachments (jsonb), reactions (jsonb), timestamps.
+- `message_reads` – per-conversation last-read state.
+- `notifications` – added `link` (deep link) and `payload` columns.
+
+Existing tables reused: `user_profiles`, `communities`, `community_members`, `community_messages`, `message_reactions`, `message_replies`, `content_reports`, `notifications`.
 
 ---
 

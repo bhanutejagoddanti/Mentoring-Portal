@@ -202,9 +202,9 @@ export const starterData = {
 
 export const fields = ['IT', 'ML', 'Finance', 'Data & Product', 'Business', 'Design']
 export const navByRole = {
-  student: ['Home', 'Profile', 'My Mentorship', 'Communities', 'History', 'Help'],
-  mentor: ['Requests', 'My Students', 'Profile', 'Communities', 'History', 'Help'],
-  admin: ['Dashboard', 'Approvals', 'Students', 'Mentors', 'Communities', 'Help Tickets', 'Statistics', 'Term Settings'],
+  student: ['Home', 'Profile', 'Inbox', 'My Mentorship', 'Communities', 'History', 'Help'],
+  mentor: ['Requests', 'My Students', 'Inbox', 'Profile', 'Communities', 'History', 'Help'],
+  admin: ['Dashboard', 'Approvals', 'Students', 'Mentors', 'Inbox', 'Communities', 'Help Tickets', 'Statistics', 'Term Settings'],
 }
 
 export function loadData() {

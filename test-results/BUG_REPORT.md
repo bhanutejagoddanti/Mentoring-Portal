@@ -32,6 +32,25 @@
 **Fix:** Substring match on `conduct/disciplinary/misconduct/inappropriate` (`student/help/routes.py`). **STATUS:** ✅ RESOLVED & VERIFIED
 **Files:** `student/help/routes.py`
 
+## B6 (P2) — Inbox DM conversation detail missing peer context
+**Role:** Student · **Steps:** Open Inbox → open a DM conversation → chat header fell back to generic label; read-receipt context incomplete.
+**Root cause:** `GET /api/messaging/conversations/<uuid>` service returned conversation/participant/messages but not the resolved `other` peer (name/role/last-read).
+**Fix:** `backend/common/messaging/service.py` `get_conversation` now resolves and returns the `other` peer block. **Retest:** Backend suite + frontend build + browser Inbox render → fixed. **STATUS:** ✅ RESOLVED
+**Files:** `backend/common/messaging/service.py`, `frontend/src/pages/InboxPage.jsx`
+
+## B7 (P2) — Notifications silently failed to persist (wrong column name)
+**Role:** All · **Steps:** Trigger a notification (e.g., DM send) → check `notifications` table.
+**Root cause:** Service inserted `body` while the schema column is `message`; exception was swallowed → zero notifications ever stored.
+**Fix:** `common/notifications/service.py` now writes `message` (plus `link`/`payload` support). **Retest:** `POST /api/messaging/.../messages` path inserts via fixed writer; suite green. **STATUS:** ✅ RESOLVED & VERIFIED
+**Files:** `backend/common/notifications/service.py`
+
+## B8 (P2) — Admin community-moderation blueprint URL prefix doubled
+**Role:** Admin · **Steps:** Call `GET /api/admin/community-moderation/reports`.
+**Root cause:** Sub-blueprint registered on `admin_bp` (prefix `/api/admin`) already carrying `/api/admin/community-moderation` prefix → effective path doubled.
+**Fix:** Sub-blueprint `url_prefix` set to `/community-moderation`. **Retest:** Route registration check passes; live unauth call → `401`. **STATUS:** ✅ RESOLVED & VERIFIED
+**Files:** `backend/admin/community_moderation/routes.py`, `backend/admin/routes.py`
+
 ## Notes (not bugs)
 - Admin community queue timing: the empty queue observed mid-run was a read-before-fetch race (fetch resolves ~async); after wait, the queue renders correctly.
 - Chat input appearing “stuck” after `/find` was a test-harness double-submit + React value-tracker artifact; manual clear verifies `setText('')` works.
+- Backend was down at session start (connection refused on :5001); restarted via `backend/.venv/bin/python app.py` → `/api/health` → `200 OK`.

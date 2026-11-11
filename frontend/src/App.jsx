@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { apiLogin, apiRegister, apiRequest, setToken, apiLogout, apiMe } from './api'
+import { apiLogin, apiRegister, apiRequest, setToken, apiLogout, apiMe, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiUnreadNotificationCount, apiNotifications, apiSearchUsers, apiCreateConversation } from './api'
 import { localAccounts, loadData, navByRole, termLabel } from './data'
 import { Panel, Title, input, button, outline } from './ui'
 import { StudentHome, StudentProfile, MentorDetails, MyMentorship, HistoryPage, HelpPage } from './pages/StudentPages'
 import { MentorRequests, MyStudents, MentorProfile } from './pages/MentorPages'
 import CommunityPage from './pages/CommunityPage'
+import InboxPage from './pages/InboxPage'
 import {
   AdminDashboard,
   Approvals,
@@ -33,6 +34,10 @@ export default function App() {
   const [error, setError] = useState('')
   const [selectedMentor, setSelectedMentor] = useState(null)
   const [backendReady, setBackendReady] = useState(false)
+  const [inboxFocusId, setInboxFocusId] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [unreadNotifs, setUnreadNotifs] = useState(0)
+  const [notifOpen, setNotifOpen] = useState(false)
 
   useEffect(() => {
     async function restoreSession() {
@@ -47,6 +52,29 @@ export default function App() {
     }
     restoreSession()
   }, [])
+
+  useEffect(() => {
+    if (!user) {
+      setNotifications([])
+      setUnreadNotifs(0)
+      return
+    }
+    async function loadNotifs() {
+      try {
+        const [listRes, countRes] = await Promise.all([apiNotifications(), apiUnreadNotificationCount()])
+        setNotifications(listRes?.items || [])
+        setUnreadNotifs(countRes?.count || 0)
+      } catch {
+        // notifications are best-effort for the bell
+      }
+    }
+    loadNotifs()
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') loadNotifs()
+    }, 20000)
+    return () => clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.role])
 
   useEffect(() => {
     if (!user || !backendReady) return
@@ -270,6 +298,42 @@ export default function App() {
     event.currentTarget.reset()
   }
 
+  async function startDm(peer) {
+    try {
+      const res = await apiSearchUsers((peer?.name || '').trim(), peer?.role || undefined)
+      const items = res?.items || []
+      const found = items.find((u) => peer?.id && u.id === peer.id) || items[0]
+      if (!found) {
+        alert('Could not find that user to start a conversation.')
+        return
+      }
+      const conv = await apiCreateConversation(found.id)
+      setInboxFocusId(conv?.conversation?.id || null)
+      setPage('Inbox')
+      setSelectedMentor(null)
+    } catch (err) {
+      alert('Could not start conversation: ' + err.message)
+    }
+  }
+
+  function navigateToPage(target) {
+    const map = {
+      inbox: 'Inbox',
+      mentorship: 'My Mentorship',
+      communities: 'Communities',
+      help: 'Help',
+      meetings: 'My Mentorship',
+      requests: 'Requests',
+      students: 'My Students',
+      mentors: 'Mentors',
+      dashboard: 'Dashboard',
+      profile: 'Profile',
+    }
+    const key = String(target || '').toLowerCase().replace(/^\//, '').split('/')[0]
+    const next = map[key] || 'Home'
+    if (navByRole[user.role]?.includes(next)) setPage(next)
+  }
+
   function saveProfile(form) {
     const profile = {
       name: user.name,
@@ -302,11 +366,12 @@ export default function App() {
     if (user.role === 'student') {
       if (page === 'Home') return <StudentHome data={data} user={user} onMentor={setSelectedMentor} />
       if (page === 'Profile')
-        return <StudentProfile user={user} data={data} profile={data.profiles?.[user.email]} onSave={saveProfile} />
+        return <StudentProfile user={user} data={data} profile={data.profiles?.[user.email]} onSave={saveProfile} onMessage={startDm} />
+      if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'My Mentorship')
         return <MyMentorship user={user} data={data} updateData={setData} onChat={sendChat} />
       if (page === 'Communities')
-        return <CommunityPage user={user} data={data} updateData={setData} />
+        return <CommunityPage user={user} data={data} updateData={setData} onMessage={startDm} />
       if (page === 'History') return <HistoryPage role="student" user={user} data={data} />
       if (page === 'Help') return <HelpPage user={user} data={data} onSubmit={sendHelp} updateData={setData} />
     }
@@ -316,9 +381,10 @@ export default function App() {
         return (
           <MyStudents user={user} data={data} updateData={setData} onChat={sendChat} setStatus={setRequestStatus} />
         )
+      if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Profile') return <MentorProfile user={user} data={data} updateData={setData} />
       if (page === 'Communities')
-        return <CommunityPage user={user} data={data} updateData={setData} />
+        return <CommunityPage user={user} data={data} updateData={setData} onMessage={startDm} />
       if (page === 'History') return <HistoryPage role="mentor" user={user} data={data} />
       if (page === 'Help') return <HelpPage user={user} data={data} onSubmit={sendHelp} updateData={setData} />
     }
@@ -329,8 +395,9 @@ export default function App() {
         return <AdminStudents data={data} onBlacklist={blacklistAccount} onActivate={activateAccount} />
       if (page === 'Mentors')
         return <AdminMentors data={data} onBlacklist={blacklistAccount} onActivate={activateAccount} />
+      if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Communities')
-        return <CommunityPage user={user} data={data} updateData={setData} />
+        return <CommunityPage user={user} data={data} updateData={setData} onMessage={startDm} />
       if (page === 'Help Tickets') return <HelpTickets data={data} updateData={setData} />
       if (page === 'Statistics') return <Statistics data={data} onDownload={downloadReport} />
       if (page === 'Term Settings') return <TermSettings data={data} updateData={setData} />
@@ -420,6 +487,74 @@ export default function App() {
             <span className="text-slate-500">Mentoring / </span>
             <b className="text-slate-900">{page}</b>
           </div>
+          <div className="relative">
+            <button
+              type="button"
+              className="relative grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700"
+              onClick={() => setNotifOpen((v) => !v)}
+              title="Notifications"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              </svg>
+              {unreadNotifs > 0 && (
+                <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  {unreadNotifs > 9 ? '9+' : unreadNotifs}
+                </span>
+              )}
+            </button>
+            {notifOpen && (
+              <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                  <b className="text-sm text-slate-900">Notifications</b>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-indigo-700 hover:underline"
+                    onClick={async () => {
+                      try {
+                        const res = await apiMarkAllNotificationsRead()
+                        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+                        setUnreadNotifs(res?.updated || 0)
+                      } catch {
+                        /* ignore */
+                      }
+                    }}
+                  >
+                    Mark all read
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <p className="p-4 text-sm text-slate-400">No notifications yet.</p>
+                  ) : (
+                    notifications.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        className={`block w-full border-b border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50 ${n.read ? '' : 'bg-indigo-50/60'}`}
+                        onClick={async () => {
+                          try {
+                            await apiMarkNotificationRead(n.id)
+                            setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
+                            setUnreadNotifs((prev) => Math.max(0, prev - 1))
+                          } catch {
+                            /* ignore */
+                          }
+                          setNotifOpen(false)
+                          navigateToPage(n.link)
+                        }}
+                      >
+                        <b className="block text-xs text-slate-800">{n.title}</b>
+                        <span className="mt-0.5 block text-xs text-slate-500">{n.message}</span>
+                        <span className="mt-1 block text-[10px] text-slate-400">{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800">
             {termLabel(data.term)}
           </span>
@@ -427,7 +562,7 @@ export default function App() {
         <main className="w-full flex-1 px-5 py-6 lg:px-8 lg:py-8">{pageContent()}</main>
       </div>
       {selectedMentor && (
-        <MentorDetails mentor={selectedMentor} onClose={() => setSelectedMentor(null)} onRequest={createRequest} />
+        <MentorDetails mentor={selectedMentor} onClose={() => setSelectedMentor(null)} onRequest={createRequest} onMessage={startDm} />
       )}
     </div>
   )

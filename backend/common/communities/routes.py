@@ -71,7 +71,34 @@ def send_community_message(cid: int):
     content = (data.get('content') or '').strip()
     if not content:
         return error_response('Message content is required', 400)
-    return api_response(send_message(cid, current_user(), content), status=201)
+    result = send_message(cid, current_user(), content, data.get('reply_to_id'), data.get('attachments') or [])
+    if result.get('error'):
+        return error_response(result['error'], result.get('status', 400))
+    return api_response(result, status=201)
+
+
+@bp.post('/communities/<int:cid>/messages/<int:message_id>/reaction')
+@login_required
+def react_community_message(cid: int, message_id: int):
+    """Toggle a reaction on a community message."""
+    from common.communities.messaging import set_reaction
+    data = request.get_json() or {}
+    reaction = (data.get('reaction') or '').strip()
+    if not reaction:
+        return error_response('Reaction is required', 400)
+    result = set_reaction(cid, message_id, current_user(), reaction)
+    if result.get('error'):
+        return error_response(result['error'], result.get('status', 400))
+    return api_response(result)
+
+
+@bp.get('/communities/<int:cid>/members')
+@login_required
+def list_community_members(cid: int):
+    """List active members of a community (profiles + roles)."""
+    from common.communities.messaging import list_members
+    members = list_members(cid)
+    return api_response(items=members, total=len(members))
 
 
 @bp.post('/communities/<int:cid>/report')

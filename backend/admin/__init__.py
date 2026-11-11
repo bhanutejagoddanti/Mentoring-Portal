@@ -12,7 +12,10 @@ def __getattr__(name):
     if name == 'help_status_bp_full':
         from admin.routes import help_status_bp_full
         return help_status_bp_full
+    if name == 'community_moderation_bp':
+        from admin.community_moderation.routes import bp
+        return bp
     raise AttributeError(name)
 
 
-__all__ = ['admin_bp', 'matching_bp_full', 'help_status_bp_full']
+__all__ = ['admin_bp', 'matching_bp_full', 'help_status_bp_full', 'community_moderation_bp']

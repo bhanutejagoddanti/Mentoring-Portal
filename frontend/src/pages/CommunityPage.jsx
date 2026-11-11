@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Panel, Title, Chip, input, button, outline } from '../ui'
-import { apiRequest } from '../api'
+import { apiRequest, apiSendCommunityMessage, apiReactCommunity, apiCommunityMembers } from '../api'
 
 const defaultCommunities = [
   {
@@ -41,7 +41,7 @@ const defaultCommunities = [
   },
 ]
 
-export default function CommunityPage({ user, data, updateData }) {
+export default function CommunityPage({ user, data, updateData, onMessage }) {
   const [communities, setCommunities] = useState([])
   const [activeCommunity, setActiveCommunity] = useState(null)
   const [messages, setMessages] = useState([])
@@ -64,6 +64,8 @@ export default function CommunityPage({ user, data, updateData }) {
     { id: 2, title: 'Recommended ML Roadmap & Courses', url: 'https://example.com/ml-roadmap' },
   ])
   const [messageText, setMessageText] = useState('')
+  const [replyTo, setReplyTo] = useState(null)
+  const [members, setMembers] = useState([])
   const [creating, setCreating] = useState(false)
   const [reportModal, setReportModal] = useState(null)
   const [reportReason, setReportReason] = useState('')
@@ -104,8 +106,18 @@ export default function CommunityPage({ user, data, updateData }) {
   useEffect(() => {
     if (activeCommunity) {
       loadMessages(activeCommunity.id)
+      loadMembers(activeCommunity.id)
     }
   }, [activeCommunity])
+
+  async function loadMembers(cid) {
+    try {
+      const res = await apiCommunityMembers(cid)
+      setMembers(res?.items || [])
+    } catch {
+      setMembers([])
+    }
+  }
 
   async function loadMessages(cid) {
     try {
@@ -151,14 +163,26 @@ export default function CommunityPage({ user, data, updateData }) {
     }
     setMessages((prev) => [...prev, newMsg])
     const textToSend = messageText.trim()
+    const payload = { content: textToSend }
+    if (replyTo) payload.reply_to_id = replyTo.id
     setMessageText('')
+    setReplyTo(null)
     try {
-      await apiRequest(`/communities/${activeCommunity.id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ content: textToSend }),
-      })
+      const res = await apiSendCommunityMessage(activeCommunity.id, textToSend, replyTo?.id, [])
+      setMessages((prev) => prev.map((m) => (m.id === newMsg.id ? { ...m, id: res?.message?.id ?? m.id, created_at: res?.message?.created_at || m.created_at } : m)))
     } catch (err) {
       console.warn('Message send API failed:', err)
+    }
+  }
+
+  async function handleToggleReaction(m, reaction) {
+    if (!activeCommunity) return
+    try {
+      const res = await apiReactCommunity(activeCommunity.id, m.id, reaction)
+      const reactions = res?.message?.reactions || (m.reactions || [])
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions } : x)))
+    } catch (err) {
+      console.warn('Reaction failed:', err)
     }
   }
 
@@ -426,7 +450,32 @@ export default function CommunityPage({ user, data, updateData }) {
 
         <div>
           {activeCommunity ? (
-            <Panel
+            <>
+              <Panel title={`Members (${members.length || activeCommunity.member_count || 0})`}>
+                <div className="space-y-2">
+                  {members.length === 0 ? (
+                    <p className="text-sm text-slate-500">No member records yet.</p>
+                  ) : (
+                    members.map((m, idx) => (
+                      <div key={idx} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2">
+                        <div className="grid size-9 place-items-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
+                          {String(m.name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <b className="block truncate text-sm text-slate-800">{m.name}</b>
+                          <span className={`text-[10px] font-semibold capitalize ${m.role === 'admin' || m.role === 'owner' || m.role === 'moderator' ? 'text-purple-600' : 'text-slate-500'}`}>{m.role}</span>
+                        </div>
+                        {onMessage && (
+                          <button className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700" onClick={() => onMessage({ name: m.name, role: m.role })}>
+                            Message
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </Panel>
+              <Panel
               title={activeCommunity.name}
               action={
                 <div className="flex items-center gap-2">
@@ -462,7 +511,26 @@ export default function CommunityPage({ user, data, updateData }) {
                           <b>{m.sender_name}</b>
                           <span>{m.created_at || 'Just now'}</span>
                         </div>
+                        {m.reply_to_id && (
+                          <div className="mb-1 rounded-lg bg-black/10 px-2 py-1 text-[11px]">
+                            Replying to message #{m.reply_to_id}
+                          </div>
+                        )}
                         <p>{m.content}</p>
+                        {m.reactions && m.reactions.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {m.reactions.map((r, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => handleToggleReaction(m, r.reaction)}
+                                className="rounded-full border px-2 py-0.5 text-xs transition hover:scale-105"
+                              >
+                                {r.reaction}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {m.sender_name !== user.name && (
                           <div className="mt-1 text-right">
                             <button
@@ -478,20 +546,31 @@ export default function CommunityPage({ user, data, updateData }) {
                   )}
                 </div>
 
-                <form className="mt-4 flex gap-2 border-t pt-3" onSubmit={handleSendMessage}>
-                  <input
-                    className={input}
-                    value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    placeholder={activeCommunity.joined ? 'Write a message to the community...' : 'Join to participate in chat...'}
-                    disabled={!activeCommunity.joined}
-                  />
-                  <button className={button} disabled={!activeCommunity.joined || !messageText.trim()}>
-                    Send
-                  </button>
+                <form className="mt-4 flex flex-col gap-2 border-t pt-3" onSubmit={handleSendMessage}>
+                  {replyTo && (
+                    <div className="flex items-center justify-between gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs">
+                      <span className="truncate">
+                        Replying to <b>{replyTo.sender_name}</b>: {replyTo.content}
+                      </span>
+                      <button type="button" className="text-slate-500" onClick={() => setReplyTo(null)}>✕</button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      className={`flex-1 ${input}`}
+                      value={messageText}
+                      onChange={(e) => setMessageText(e.target.value)}
+                      placeholder={activeCommunity.joined ? 'Write a message to the community...' : 'Join to participate in chat...'}
+                      disabled={!activeCommunity.joined}
+                    />
+                    <button className={button} disabled={!activeCommunity.joined || !messageText.trim()}>
+                      Send
+                    </button>
+                  </div>
                 </form>
               </div>
             </Panel>
+            </>
           ) : (
             <Panel>
               <p className="text-sm text-slate-500">Select a community from the left to view discussions.</p>

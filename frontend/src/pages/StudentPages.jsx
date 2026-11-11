@@ -138,7 +138,7 @@ function MentorCard({ mentor, onClick }) {
   )
 }
 
-export function MentorDetails({ mentor, onClose, onRequest }) {
+export function MentorDetails({ mentor, onClose, onRequest, onMessage }) {
   const [goal, setGoal] = useState('')
   const [message, setMessage] = useState('')
   return (
@@ -178,15 +178,22 @@ export function MentorDetails({ mentor, onClose, onRequest }) {
           Optional message
           <textarea className={`${input} mt-1`} value={message} onChange={(e) => setMessage(e.target.value)} />
         </label>
-        <button className={`${button} mt-3`} disabled={!goal.trim()} onClick={() => onRequest(mentor, goal, message)}>
-          Send request
-        </button>
+        <div className="mt-4 flex gap-2">
+          <button className={`${button} mt-3`} disabled={!goal.trim()} onClick={() => onRequest(mentor, goal, message)}>
+            Send request
+          </button>
+          {onMessage && (
+            <button className={`${outline} mt-3`} onClick={() => onMessage(mentor)}>
+              Message
+            </button>
+          )}
+        </div>
       </section>
     </div>
   )
 }
 
-export function StudentProfile({ user, data, profile = {}, onSave }) {
+export function StudentProfile({ user, data, profile = {}, onSave, onMessage }) {
   const request = data.requests.filter((item) => item.student === user.name)
   const assigned = request.find((item) => item.status === 'Accepted')
   const meetings = data.meetings.filter((item) => item.student === user.name && new Date(item.date) >= new Date())
@@ -230,6 +237,11 @@ export function StudentProfile({ user, data, profile = {}, onSave }) {
           <p className="text-sm">
             {termLabel(data.term)}: {assigned?.mentor || 'Not assigned'}
           </p>
+          {assigned?.mentor && onMessage && (
+            <button className={`${button} mt-4`} onClick={() => onMessage({ name: assigned.mentor, role: 'mentor' })}>
+              Message mentor
+            </button>
+          )}
           <h3 className="mb-2 mt-5 font-medium">Requests</h3>
           {request.map((item) => (
             <p key={item.id} className="border-t py-2 text-sm">

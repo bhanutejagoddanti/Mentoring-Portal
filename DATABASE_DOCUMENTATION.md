@@ -118,6 +118,11 @@ erDiagram
 | `event_registrations` | Event signups | id, event_id, user_id |
 | `community_resources` | Resources | id, community_id, title, resource_type, url, description, uploaded_by |
 | `content_reports` | Reports | id, reported_by, community_id, message_id, reason, status |
+| `conversations` | DMs / typed community conversations (migration 003) | id, type, community_id, created_by, status, created_at, updated_at, last_message_at |
+| `conversation_participants` | DM membership | conversation_id, user_id, role, status, unread_count, last_read_at, joined_at |
+| `direct_messages` | DM content | id, conversation_id, sender_id, sender_name, sender_role, content, reply_to_id, attachments jsonb, reactions jsonb, created_at, updated_at |
+| `message_reads` | DM read receipts | conversation_id, user_id, last_read_message_id, last_read_at, updated_at |
+| `notifications` | Notifications | id, user_id, title, message, read, type, link, payload |
 
 ### 3.6 Prototype State
 
@@ -128,11 +133,14 @@ erDiagram
 ## 4. Indexes, RLS, Storage, pgvector
 
 - **Indexes:** role/email, mentor field/industry/availability, request/student/mentor/status/term,
-  meetings/action items/community messages/community members/help requests.
+  meetings/action items/community messages/community members/help requests, conversations
+  (type, created_by, last_message_at), conversation_participants (user, user+unread), direct_messages
+  (conversation_id, created_at), message_reads (conversation_id, user_id).
 - **pgvector:** `create extension vector`; `mentor_vectors.embedding vector(1536)`;
   HNSW index `idx_mentor_vectors_hnsw`; function `match_mentors(query_embedding, threshold, count)`.
 - **RLS:** enabled on all listed tables with a subset of policies (mentor visibility, own profile,
-  communities, mentorship requests, terms).
+  communities, mentorship requests, terms, plus messaging tables — conversations visible to
+  participants, participants own-row, DMs participant-scoped, notifications own-row).
 - **Storage:** bucket `mentoring-files` (private, 20 MB, allowed MIME list).
 
 ## 5. Key Relationships
