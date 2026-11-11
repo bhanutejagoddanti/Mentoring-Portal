@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Panel, Title, Chip, input, button, outline } from '../ui'
-import { apiRequest, apiSendCommunityMessage, apiReactCommunity, apiCommunityMembers } from '../api'
+import { apiRequest, apiSendCommunityMessage, apiReactCommunity } from '../api'
 
 const defaultCommunities = [
   {
@@ -65,13 +65,13 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
   ])
   const [messageText, setMessageText] = useState('')
   const [replyTo, setReplyTo] = useState(null)
-  const [members, setMembers] = useState([])
   const [creating, setCreating] = useState(false)
   const [reportModal, setReportModal] = useState(null)
   const [reportReason, setReportReason] = useState('')
   const [statusMsg, setStatusMsg] = useState('')
   const [communityRequests, setCommunityRequests] = useState([])
   const [approveModerators, setApproveModerators] = useState({})
+  const [senderProfile, setSenderProfile] = useState(null)
 
   useEffect(() => {
     loadCommunities()
@@ -106,18 +106,8 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
   useEffect(() => {
     if (activeCommunity) {
       loadMessages(activeCommunity.id)
-      loadMembers(activeCommunity.id)
     }
   }, [activeCommunity])
-
-  async function loadMembers(cid) {
-    try {
-      const res = await apiCommunityMembers(cid)
-      setMembers(res?.items || [])
-    } catch {
-      setMembers([])
-    }
-  }
 
   async function loadMessages(cid) {
     try {
@@ -130,6 +120,22 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
     } catch {
       setMessages([])
     }
+  }
+
+  function openSenderProfile(m) {
+    setSenderProfile(m)
+  }
+
+  function closeSenderProfile() {
+    setSenderProfile(null)
+  }
+
+  function messageSender(m) {
+    setSenderProfile(null)
+    const senderName = String(m?.sender_name || '')
+    const selfName = String(user?.name || '')
+    if (!onMessage || senderName === selfName) return
+    onMessage({ name: senderName, role: m?.sender_role })
   }
 
   function syncMembership(comm, joined) {
@@ -450,32 +456,7 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
 
         <div>
           {activeCommunity ? (
-            <>
-              <Panel title={`Members (${members.length || activeCommunity.member_count || 0})`}>
-                <div className="space-y-2">
-                  {members.length === 0 ? (
-                    <p className="text-sm text-slate-500">No member records yet.</p>
-                  ) : (
-                    members.map((m, idx) => (
-                      <div key={idx} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2">
-                        <div className="grid size-9 place-items-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
-                          {String(m.name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <b className="block truncate text-sm text-slate-800">{m.name}</b>
-                          <span className={`text-[10px] font-semibold capitalize ${m.role === 'admin' || m.role === 'owner' || m.role === 'moderator' ? 'text-purple-600' : 'text-slate-500'}`}>{m.role}</span>
-                        </div>
-                        {onMessage && (
-                          <button className="rounded-lg border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700" onClick={() => onMessage({ name: m.name, role: m.role })}>
-                            Message
-                          </button>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Panel>
-              <Panel
+            <Panel
               title={activeCommunity.name}
               action={
                 <div className="flex items-center gap-2">
@@ -501,46 +482,60 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
                     messages.map((m) => (
                       <div
                         key={m.id}
-                        className={`rounded-2xl p-2.5 text-sm max-w-[85%] ${
-                          m.sender_name === user.name
-                            ? 'self-end bg-indigo-600 text-white border-indigo-600'
-                            : 'self-start bg-white text-slate-800 border-slate-200'
-                        }`}
+                        className={`flex max-w-[85%] ${m.sender_name === user.name ? 'self-end' : 'self-start'}`}
                       >
-                        <div className="flex items-center justify-between gap-2 text-[11px] opacity-75 mb-1">
-                          <b>{m.sender_name}</b>
-                          <span>{m.created_at || 'Just now'}</span>
-                        </div>
-                        {m.reply_to_id && (
-                          <div className="mb-1 rounded-lg bg-black/10 px-2 py-1 text-[11px]">
-                            Replying to message #{m.reply_to_id}
-                          </div>
-                        )}
-                        <p>{m.content}</p>
-                        {m.reactions && m.reactions.length > 0 && (
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {m.reactions.map((r, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                onClick={() => handleToggleReaction(m, r.reaction)}
-                                className="rounded-full border px-2 py-0.5 text-xs transition hover:scale-105"
-                              >
-                                {r.reaction}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {m.sender_name !== user.name && (
-                          <div className="mt-1 text-right">
-                            <button
-                              onClick={() => setReportModal(m)}
-                              className="text-[10px] text-slate-400 hover:text-red-600"
-                            >
-                              Report
+                        <button
+                          type="button"
+                          onClick={() => openSenderProfile(m)}
+                          className={`grid size-8 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white ${m.sender_name === user.name ? 'bg-indigo-500' : 'bg-slate-400'}`}
+                          title={`View ${m.sender_name}`}
+                        >
+                          {String(m.sender_name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+                        </button>
+                        <div
+                          className={`rounded-2xl p-2.5 text-sm border ${
+                            m.sender_name === user.name
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-slate-800 border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 text-[11px] opacity-75 mb-1">
+                            <button type="button" onClick={() => openSenderProfile(m)} className="font-bold hover:underline">
+                              {m.sender_name}
                             </button>
+                            <span>{m.created_at || 'Just now'}</span>
                           </div>
-                        )}
+                          {m.reply_to_id && (
+                            <div className="mb-1 rounded-lg bg-black/10 px-2 py-1 text-[11px]">
+                              Replying to message #{m.reply_to_id}
+                            </div>
+                          )}
+                          <p>{m.content}</p>
+                          {m.reactions && m.reactions.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {m.reactions.map((r, i) => (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  onClick={() => handleToggleReaction(m, r.reaction)}
+                                  className="rounded-full border px-2 py-0.5 text-xs transition hover:scale-105"
+                                >
+                                  {r.reaction}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {m.sender_name !== user.name && (
+                            <div className="mt-1 text-right">
+                              <button
+                                onClick={() => setReportModal(m)}
+                                className="text-[10px] text-slate-400 hover:text-red-600"
+                              >
+                                Report
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
@@ -570,7 +565,6 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
                 </form>
               </div>
             </Panel>
-            </>
           ) : (
             <Panel>
               <p className="text-sm text-slate-500">Select a community from the left to view discussions.</p>
@@ -608,6 +602,29 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {senderProfile && (
+        <div className="fixed inset-0 z-30 grid place-items-center bg-slate-950/50 p-4 animate-fade-in">
+          <section className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-card">
+            <div className="mb-3 flex items-start gap-3">
+              <div className="grid size-12 place-items-center rounded-full bg-indigo-600 text-sm font-bold text-white">
+                {String(senderProfile.sender_name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-semibold text-slate-900">{senderProfile.sender_name}</h3>
+                <span className="text-xs font-semibold capitalize text-slate-500">{senderProfile.sender_role}</span>
+              </div>
+              <button type="button" onClick={closeSenderProfile} className="rounded-lg border border-slate-200 px-3 py-1 text-sm text-slate-600">✕</button>
+            </div>
+            <p className="mb-4 text-sm text-slate-600">
+              Community member · {senderProfile.content ? senderProfile.content.slice(0, 120) : 'Mentoring community'}
+            </p>
+            <div className="flex gap-2">
+              <button type="button" className={button} onClick={() => messageSender(senderProfile)}>Message</button>
+              <button type="button" className={outline} onClick={closeSenderProfile}>Close</button>
+            </div>
+          </section>
         </div>
       )}
     </>

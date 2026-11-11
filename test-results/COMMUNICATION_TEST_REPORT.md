@@ -98,3 +98,38 @@ Browser (real session restore + Inbox nav render) : PASS
 - `frontend/src/App.jsx`, `frontend/src/data.js`, `frontend/src/pages/CommunityPage.jsx`, `frontend/src/pages/StudentPages.jsx`
 - `API_DOCUMENTATION.md`, `DATABASE_DOCUMENTATION.md`
 - `test-results/COMMUNICATION_TEST_REPORT.md` (this file), `test-results/BUG_REPORT.md`, `test-results/screenshots/`, `test-results/test-execution.log`
+
+## 8. Round 2 — Community Chat UX + DM-from-Message (2026-11-11)
+
+### Changes delivered in Round 2
+
+1. **Members section removed** from the community chat view.
+   - Removed the standalone Members panel that rendered above the chat (state, loader, JSX).
+   - Chat now occupies the full content column → more space for conversation.
+   - **Preserved:** community name, description, member count display, Join/Leave (backend membership untouched).
+
+2. **Start DM from a community message.**
+   - Sender name and avatar are now clickable → opens small profile popup (`senderProfile`).
+   - Popup shows sender name, role badge, context and a **Message** button.
+   - `messageSender` resolves sender via `onMessage({ name, role })` → App `startDm` → user search → find-or-create DM → open in Inbox.
+
+3. **Inbox integration.**
+   - `App.startDm` → `apiCreateConversation` → `inboxFocusId` → `InboxPage` auto-opens the conversation (`focusConversationId` effect → `openConversation` → mark-read).
+   - Existing conversations are reused (backend find-or-create); history loaded from `GET /api/messaging/conversations/<uuid>`.
+
+4. **Security posture (verified in code + existing tests).**
+   - Sender identity (name/role/content) sourced from backend-persisted community messages.
+   - Community messages and DMs use separate data stores/tables — no DM history leakage into community views.
+   - DM send/read/reaction enforce conversation-participant authorization (backend tests + live 401 smoke).
+
+### Round 2 test status
+
+- `npm run build` → **OK** (after Members removal + sender-click wiring).
+- Backend suite → **47 passed, 1 skipped** (unchanged, green).
+- Live: backend `:5001` running; `/api/health` → 200; unauth new endpoints → 401; invalid UUID → 404.
+
+### Round 2 outstanding manual checks (browser, per user instruction)
+
+- Click sender name/avatar → popup → **Message** → Inbox opens/creates DM → send → reopen → history preserved.
+- Verify other community members cannot access the private DM (participant-only backend enforcement + 401/403 behavior).
+- Full click-through pending live-DB migration apply (`003_communication.sql`) for write-path E2E.
