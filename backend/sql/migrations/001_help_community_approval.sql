@@ -138,7 +138,9 @@ alter table public.help_requests add column if not exists assigned_admin_name te
 alter table public.help_requests add column if not exists decision text;
 alter table public.help_requests add column if not exists resolution_notes text;
 
+alter table public.intervention_logs add column if not exists help_request_id UUID;
 alter table public.intervention_logs add column if not exists legacy_ticket_id bigint;
+
 alter table public.intervention_logs add column if not exists action text;
 alter table public.intervention_logs add column if not exists performed_by uuid references public.user_profiles(id) on delete set null;
 alter table public.intervention_logs add column if not exists performed_by_name text;

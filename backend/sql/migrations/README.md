@@ -10,7 +10,7 @@ Run in this exact order against the Supabase project (`gbccbqvadlhfgfhzztok.supa
    - Indexes, HNSW vector index, `match_mentors` RPC, RLS policies, storage bucket `mentoring-files`, seed academic term.
 2. **`backend/sql/migrations/001_help_community_approval.sql`** — help + community-approval tables, triggers, RLS, `is_admin` helper.
 3. **`backend/sql/migrations/002_rag_vector_index.sql`** — mentor RAG vectors + `match_mentors` RPC (canonical backend signature) + search logs.
-4. **`backend/sql/migrations/003_communication.sql`** — conversations/DMs/read receipts/notifications deep-link columns + messaging RLS policies.
+4. **`backend/sql/migrations/003_communication.sql`** — conversations/DMs/read receipts/notifications deep-link columns + messaging RLS policies. Includes helper functions `public.is_active_conversation_participant(uuid)` and `public.is_conversation_participant_admin(uuid, uuid)` (SECURITY DEFINER, fixed search_path) and participant/admin policies.
 
 ## Master setup file
 
@@ -37,6 +37,7 @@ Run in this exact order against the Supabase project (`gbccbqvadlhfgfhzztok.supa
 
 ## Fix log
 
+- 2026-11: Migration 003 repaired and completed (was truncated mid-policy); added helper functions `is_active_conversation_participant` / `is_conversation_participant_admin` (SECURITY DEFINER) and participant admin update policy. All statements idempotent.
 - 2026-11: Migration 003 fixed (split `DROP POLICY`/`CREATE POLICY`; DM insert policy uses `new.conversation_id`).
 - 2026-11: Migration 001 fixed (`help_requests` policy expression was syntactically invalid).
 - 2026-11: Migration 002 fixed (`match_mentors` re-declaration conflict resolved with drop+create).

@@ -11,10 +11,10 @@ app = create_app()
 from student import student_bp
 from mentor import mentor_bp
 from admin import admin_bp, matching_bp_full, help_status_bp_full
-from common import auth_bp, database_bp, communities_bp, meetings_bp, notifications_bp
+from common import auth_bp, database_bp, communities_bp, meetings_bp, notifications_bp, messaging_bp
 
 register_error_handlers(app)
-for bp in [auth_bp, database_bp, communities_bp, meetings_bp, notifications_bp]:
+for bp in [auth_bp, database_bp, communities_bp, meetings_bp, notifications_bp, messaging_bp]:
     app.register_blueprint(bp)
 for bp in [student_bp, mentor_bp, admin_bp, matching_bp_full, help_status_bp_full]:
     app.register_blueprint(bp)

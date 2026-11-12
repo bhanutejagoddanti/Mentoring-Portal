@@ -793,7 +793,9 @@ alter table public.help_requests add column if not exists assigned_admin_name te
 alter table public.help_requests add column if not exists decision text;
 alter table public.help_requests add column if not exists resolution_notes text;
 
+alter table public.intervention_logs add column if not exists help_request_id UUID;
 alter table public.intervention_logs add column if not exists legacy_ticket_id bigint;
+
 alter table public.intervention_logs add column if not exists action text;
 alter table public.intervention_logs add column if not exists performed_by uuid references public.user_profiles(id) on delete set null;
 alter table public.intervention_logs add column if not exists performed_by_name text;
@@ -1030,6 +1032,9 @@ create index if not exists idx_conversations_type on public.conversations(type);
 create index if not exists idx_conversations_created_by on public.conversations(created_by);
 create index if not exists idx_conversations_last_message on public.conversations(last_message_at desc);
 
+-- -----------------------------------------------------------------------------
+-- Conversation participants
+-- -----------------------------------------------------------------------------
 create table if not exists public.conversation_participants (
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   user_id uuid not null references public.user_profiles(id) on delete cascade,
@@ -1045,6 +1050,9 @@ create index if not exists idx_cp_conversation on public.conversation_participan
 create index if not exists idx_cp_user on public.conversation_participants(user_id);
 create index if not exists idx_cp_user_unread on public.conversation_participants(user_id, unread_count);
 
+-- -----------------------------------------------------------------------------
+-- Direct messages
+-- -----------------------------------------------------------------------------
 create table if not exists public.direct_messages (
   id uuid primary key default gen_random_uuid(),
   conversation_id uuid not null references public.conversations(id) on delete cascade,
@@ -1061,6 +1069,9 @@ create table if not exists public.direct_messages (
 create index if not exists idx_dm_conversation on public.direct_messages(conversation_id, created_at desc);
 create index if not exists idx_dm_sender on public.direct_messages(sender_id);
 
+-- -----------------------------------------------------------------------------
+-- Message reads (read receipts / unread tracking)
+-- -----------------------------------------------------------------------------
 create table if not exists public.message_reads (
   conversation_id uuid not null references public.conversations(id) on delete cascade,
   user_id uuid not null references public.user_profiles(id) on delete cascade,
@@ -1080,7 +1091,7 @@ alter table public.notifications add column if not exists link text not null def
 alter table public.notifications add column if not exists payload jsonb not null default '{}'::jsonb;
 
 -- -----------------------------------------------------------------------------
--- RLS: enable + participant-scoped policies (service role bypasses RLS)
+-- RLS: enable on all communication tables
 -- -----------------------------------------------------------------------------
 alter table public.conversations enable row level security;
 alter table public.conversation_participants enable row level security;
@@ -1088,80 +1099,142 @@ alter table public.direct_messages enable row level security;
 alter table public.message_reads enable row level security;
 alter table public.notifications enable row level security;
 
--- Conversations: participants may read the conversation
+-- -----------------------------------------------------------------------------
+-- Helper: SECURITY DEFINER (fixed search_path, no RLS recursion) to check
+-- whether the current authenticated user is an active participant.
+-- -----------------------------------------------------------------------------
+create or replace function public.is_active_conversation_participant(p_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth.uid() is not null and exists (
+    select 1
+    from public.conversation_participants cp
+    where cp.conversation_id = p_conversation_id
+      and cp.user_id = auth.uid()
+      and cp.status = 'active'
+  );
+$$;
+
+create or replace function public.is_conversation_participant_admin(p_conversation_id uuid, p_user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.conversation_participants cp
+    where cp.conversation_id = p_conversation_id
+      and cp.user_id = p_user_id
+      and cp.status = 'active'
+      and cp.role in ('owner', 'admin')
+  );
+$$;
+
+revoke all on function public.is_active_conversation_participant(uuid) from public;
+grant execute on function public.is_active_conversation_participant(uuid) to authenticated, service_role;
+revoke all on function public.is_conversation_participant_admin(uuid, uuid) from public;
+grant execute on function public.is_conversation_participant_admin(uuid, uuid) to authenticated, service_role;
+
+-- -----------------------------------------------------------------------------
+-- RLS policies: conversations (participant-scoped reads, owner self-insert)
+-- -----------------------------------------------------------------------------
 drop policy if exists "conversations_select_participant" on public.conversations;
 create policy "conversations_select_participant" on public.conversations
-  for select using (
-    exists (
-      select 1
-      from public.conversation_participants cp
-      where cp.conversation_id = conversations.id
-        and cp.user_id = auth.uid()
-    )
-  );
+  for select to authenticated
+  using (public.is_active_conversation_participant(id));
 
--- Conversations: an authenticated user may create a conversation on behalf of themselves
 drop policy if exists "conversations_insert_own" on public.conversations;
 create policy "conversations_insert_own" on public.conversations
-  for insert with check (auth.uid() = created_by);
+  for insert to authenticated
+  with check (auth.uid() = created_by);
 
--- Conversation participants: a user may read their own membership rows
+-- -----------------------------------------------------------------------------
+-- RLS policies: conversation participants (self read/insert; admin update)
+-- -----------------------------------------------------------------------------
 drop policy if exists "conversation_participants_select_own" on public.conversation_participants;
 create policy "conversation_participants_select_own" on public.conversation_participants
-  for select using (user_id = auth.uid());
+  for select to authenticated
+  using (user_id = auth.uid());
 
--- Conversation participants: a user may insert their own membership row
 drop policy if exists "conversation_participants_insert_own" on public.conversation_participants;
 create policy "conversation_participants_insert_own" on public.conversation_participants
-  for insert with check (user_id = auth.uid());
+  for insert to authenticated
+  with check (user_id = auth.uid());
 
--- Direct messages: a user may read messages in conversations they participate in
+drop policy if exists "conversation_participants_update_admin" on public.conversation_participants;
+create policy "conversation_participants_update_admin" on public.conversation_participants
+  for update to authenticated
+  using (public.is_conversation_participant_admin(conversation_id, auth.uid()))
+  with check (public.is_conversation_participant_admin(conversation_id, auth.uid()));
+
+-- -----------------------------------------------------------------------------
+-- RLS policies: direct messages (participant-scoped reads/writes)
+-- -----------------------------------------------------------------------------
 drop policy if exists "direct_messages_participant_select" on public.direct_messages;
 create policy "direct_messages_participant_select" on public.direct_messages
-  for select using (
+  for select to authenticated
+  using (
     exists (
       select 1
       from public.conversation_participants cp
       where cp.conversation_id = direct_messages.conversation_id
         and cp.user_id = auth.uid()
+        and cp.status = 'active'
     )
   );
 
--- Direct messages: sender must be an active participant of the target conversation
 drop policy if exists "direct_messages_participant_insert" on public.direct_messages;
 create policy "direct_messages_participant_insert" on public.direct_messages
-  for insert with check (
+  for insert to authenticated
+  with check (
     exists (
       select 1
       from public.conversation_participants cp
       where cp.conversation_id = new.conversation_id
         and cp.user_id = auth.uid()
+        and cp.status = 'active'
     )
   );
 
--- Message reads: a user may read their own read-state rows
+-- -----------------------------------------------------------------------------
+-- RLS policies: message reads (self read receipts only)
+-- -----------------------------------------------------------------------------
 drop policy if exists "message_reads_participant_select" on public.message_reads;
 create policy "message_reads_participant_select" on public.message_reads
-  for select using (user_id = auth.uid());
+  for select to authenticated
+  using (user_id = auth.uid());
 
--- Message reads: a user may create/update their own read-state rows
 drop policy if exists "message_reads_participant_insert" on public.message_reads;
 create policy "message_reads_participant_insert" on public.message_reads
-  for insert with check (user_id = auth.uid());
+  for insert to authenticated
+  with check (user_id = auth.uid());
 
 drop policy if exists "message_reads_participant_update" on public.message_reads;
 create policy "message_reads_participant_update" on public.message_reads
-  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+  for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
--- Notifications: a user may read/insert/update only their own notifications
+-- -----------------------------------------------------------------------------
+-- RLS policies: notifications (own rows only; preserve existing behavior)
+-- -----------------------------------------------------------------------------
 drop policy if exists "notifications_own_select" on public.notifications;
 create policy "notifications_own_select" on public.notifications
-  for select using (user_id = auth.uid());
+  for select to authenticated
+  using (user_id = auth.uid());
 
 drop policy if exists "notifications_own_insert" on public.notifications;
 create policy "notifications_own_insert" on public.notifications
-  for insert with check (user_id = auth.uid());
+  for insert to authenticated
+  with check (user_id = auth.uid());
 
 drop policy if exists "notifications_own_update" on public.notifications;
 create policy "notifications_own_update" on public.notifications
-  for update using (user_id = auth.uid());
+  for update to authenticated
+  using (user_id = auth.uid());
