@@ -68,7 +68,9 @@ def send_dm(conversation_id: str):
 def mark_read(conversation_id: str):
     """Mark conversation messages as read for the current user."""
     user = current_user()
-    result = messaging_service.mark_read(conversation_id, user)
+    data = request.get_json(silent=True) or {}
+    last_read_message_id = data.get('last_read_message_id') or data.get('message_id') or None
+    result = messaging_service.mark_read(conversation_id, user, last_read_message_id=last_read_message_id)
     if result.get('error'):
         return error_response(result['error'], result.get('status', 400))
     return api_response(result)
