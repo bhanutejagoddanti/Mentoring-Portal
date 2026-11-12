@@ -4,8 +4,8 @@
 -- Supabase schema (user_profiles, communities, community_messages,
 -- notifications, content_reports, app_state).
 --
--- Safe to run repeatedly (IF NOT EXISTS / IF NOT EXISTS columns).
--- Does not drop existing data.
+-- Safe to run repeatedly (IF NOT EXISTS / IF NOT EXISTS columns / DROP POLICY IF EXISTS).
+-- Does not drop existing tables or records.
 -- =============================================================================
 
 create extension if not exists "uuid-ossp";
@@ -87,43 +87,80 @@ alter table public.direct_messages enable row level security;
 alter table public.message_reads enable row level security;
 alter table public.notifications enable row level security;
 
+-- Conversations: participants may read the conversation
 drop policy if exists "conversations_select_participant" on public.conversations;
 create policy "conversations_select_participant" on public.conversations
   for select using (
     exists (
-      select 1 from public.conversation_participants cp
-      where cp.conversation_id = conversations.id and cp.user_id = auth.uid()
+      select 1
+      from public.conversation_participants cp
+      where cp.conversation_id = conversations.id
+        and cp.user_id = auth.uid()
     )
   );
 
+-- Conversations: an authenticated user may create a conversation on behalf of themselves
+drop policy if exists "conversations_insert_own" on public.conversations;
+create policy "conversations_insert_own" on public.conversations
+  for insert with check (auth.uid() = created_by);
+
+-- Conversation participants: a user may read their own membership rows
 drop policy if exists "conversation_participants_select_own" on public.conversation_participants;
 create policy "conversation_participants_select_own" on public.conversation_participants
   for select using (user_id = auth.uid());
 
-drop policy if exists "direct_messages_participant_select" on public.direct_messages
-  for select using (
-    exists (
-      select 1 from public.conversation_participants cp
-      where cp.conversation_id = direct_messages.conversation_id and cp.user_id = auth.uid()
-    )
-  );
-
-drop policy if exists "direct_messages_participant_insert" on public.direct_messages
-  for insert with check (
-    exists (
-      select 1 from public.conversation_participants cp
-      where cp.conversation_id = conversation_participants.conversation_id and cp.user_id = auth.uid()
-    )
-  );
-
-drop policy if exists "message_reads_participant_select" on public.message_reads
-  for select using (user_id = auth.uid());
-
-drop policy if exists "notifications_own_select" on public.notifications
-  for select using (user_id = auth.uid());
-
-drop policy if exists "notifications_own_insert" on public.notifications
+-- Conversation participants: a user may insert their own membership row
+drop policy if exists "conversation_participants_insert_own" on public.conversation_participants;
+create policy "conversation_participants_insert_own" on public.conversation_participants
   for insert with check (user_id = auth.uid());
 
-drop policy if exists "notifications_own_update" on public.notifications
+-- Direct messages: a user may read messages in conversations they participate in
+drop policy if exists "direct_messages_participant_select" on public.direct_messages;
+create policy "direct_messages_participant_select" on public.direct_messages
+  for select using (
+    exists (
+      select 1
+      from public.conversation_participants cp
+      where cp.conversation_id = direct_messages.conversation_id
+        and cp.user_id = auth.uid()
+    )
+  );
+
+-- Direct messages: sender must be an active participant of the target conversation
+drop policy if exists "direct_messages_participant_insert" on public.direct_messages;
+create policy "direct_messages_participant_insert" on public.direct_messages
+  for insert with check (
+    exists (
+      select 1
+      from public.conversation_participants cp
+      where cp.conversation_id = new.conversation_id
+        and cp.user_id = auth.uid()
+    )
+  );
+
+-- Message reads: a user may read their own read-state rows
+drop policy if exists "message_reads_participant_select" on public.message_reads;
+create policy "message_reads_participant_select" on public.message_reads
+  for select using (user_id = auth.uid());
+
+-- Message reads: a user may create/update their own read-state rows
+drop policy if exists "message_reads_participant_insert" on public.message_reads;
+create policy "message_reads_participant_insert" on public.message_reads
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "message_reads_participant_update" on public.message_reads;
+create policy "message_reads_participant_update" on public.message_reads
+  for update using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Notifications: a user may read/insert/update only their own notifications
+drop policy if exists "notifications_own_select" on public.notifications;
+create policy "notifications_own_select" on public.notifications
+  for select using (user_id = auth.uid());
+
+drop policy if exists "notifications_own_insert" on public.notifications;
+create policy "notifications_own_insert" on public.notifications
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "notifications_own_update" on public.notifications;
+create policy "notifications_own_update" on public.notifications
   for update using (user_id = auth.uid());
