@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiLogin, apiRegister, apiRequest, setToken, apiLogout, apiMe, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiUnreadNotificationCount, apiNotifications, apiSearchUsers, apiCreateConversation } from './api'
 import { localAccounts, loadData, navByRole, termLabel } from './data'
 import { Panel, Title, input, button, outline } from './ui'
@@ -38,6 +38,9 @@ export default function App() {
   const [notifications, setNotifications] = useState([])
   const [unreadNotifs, setUnreadNotifs] = useState(0)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [notifLoading, setNotifLoading] = useState(false)
+  const [notifError, setNotifError] = useState('')
+  const notifRef = useRef(null)
 
   useEffect(() => {
     async function restoreSession() {
@@ -53,20 +56,25 @@ export default function App() {
     restoreSession()
   }, [])
 
+  async function loadNotifs() {
+    setNotifLoading(true)
+    setNotifError('')
+    try {
+      const [listRes, countRes] = await Promise.all([apiNotifications(), apiUnreadNotificationCount()])
+      setNotifications(listRes?.items || [])
+      setUnreadNotifs(countRes?.count || 0)
+    } catch (err) {
+      setNotifError(err?.message || 'Failed to load notifications')
+    } finally {
+      setNotifLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!user) {
       setNotifications([])
       setUnreadNotifs(0)
       return
-    }
-    async function loadNotifs() {
-      try {
-        const [listRes, countRes] = await Promise.all([apiNotifications(), apiUnreadNotificationCount()])
-        setNotifications(listRes?.items || [])
-        setUnreadNotifs(countRes?.count || 0)
-      } catch {
-        // notifications are best-effort for the bell
-      }
     }
     loadNotifs()
     const timer = setInterval(() => {
@@ -75,6 +83,15 @@ export default function App() {
     return () => clearInterval(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, user?.role])
+
+  useEffect(() => {
+    if (!notifOpen) return
+    function onDown(e) {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [notifOpen])
 
   useEffect(() => {
     if (!user || !backendReady) return
@@ -300,16 +317,24 @@ export default function App() {
 
   async function startDm(peer) {
     try {
-      const res = await apiSearchUsers((peer?.name || '').trim(), peer?.role || undefined)
-      const items = res?.items || []
-      const found = items.find((u) => peer?.id && u.id === peer.id) || items[0]
+      const rawRole = String(peer?.role || '').toLowerCase()
+      const role = ['student', 'mentor', 'admin'].includes(rawRole) ? rawRole : undefined
+      const name = (peer?.name || '').trim()
+      let res = await apiSearchUsers(name, role)
+      let items = res?.items || []
+      if (!items.length && role) {
+        // Peer came from a source whose "role" is not an account role (e.g. a mentor job title).
+        res = await apiSearchUsers(name)
+        items = res?.items || []
+      }
+      const found = (peer?.user_id && items.find((u) => u.id === peer.user_id)) || items[0]
       if (!found) {
         alert('Could not find that user to start a conversation.')
         return
       }
       const conv = await apiCreateConversation(found.id)
       setInboxFocusId(conv?.conversation?.id || null)
-      setPage('Inbox')
+      setPage('Chat')
       setSelectedMentor(null)
     } catch (err) {
       alert('Could not start conversation: ' + err.message)
@@ -318,7 +343,7 @@ export default function App() {
 
   function navigateToPage(target) {
     const map = {
-      inbox: 'Inbox',
+      inbox: 'Chat',
       mentorship: 'My Mentorship',
       communities: 'Communities',
       help: 'Help',
@@ -368,7 +393,6 @@ export default function App() {
       if (page === 'Profile')
         return <StudentProfile user={user} data={data} profile={data.profiles?.[user.email]} onSave={saveProfile} onMessage={startDm} />
       if (page === 'Chat') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
-      if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'My Mentorship')
         return <MyMentorship user={user} data={data} updateData={setData} onChat={sendChat} />
       if (page === 'Communities')
@@ -383,7 +407,6 @@ export default function App() {
           <MyStudents user={user} data={data} updateData={setData} onChat={sendChat} setStatus={setRequestStatus} />
         )
       if (page === 'Chat') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
-      if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Profile') return <MentorProfile user={user} data={data} updateData={setData} />
       if (page === 'Communities')
         return <CommunityPage user={user} data={data} updateData={setData} onMessage={startDm} />
@@ -398,7 +421,6 @@ export default function App() {
       if (page === 'Mentors')
         return <AdminMentors data={data} onBlacklist={blacklistAccount} onActivate={activateAccount} />
       if (page === 'Chat') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
-      if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Communities')
         return <CommunityPage user={user} data={data} updateData={setData} onMessage={startDm} />
       if (page === 'Help Tickets') return <HelpTickets data={data} updateData={setData} />
@@ -490,7 +512,8 @@ export default function App() {
             <span className="text-slate-500">Mentoring / </span>
             <b className="text-slate-900">{page}</b>
           </div>
-          <div className="relative">
+          <div className="flex items-center gap-3">
+            <div className="relative" ref={notifRef}>
             <button
               type="button"
               className="relative grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-indigo-300 hover:text-indigo-700"
@@ -511,24 +534,38 @@ export default function App() {
               <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                   <b className="text-sm text-slate-900">Notifications</b>
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-indigo-700 hover:underline"
-                    onClick={async () => {
-                      try {
-                        const res = await apiMarkAllNotificationsRead()
-                        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-                        setUnreadNotifs(res?.updated || 0)
-                      } catch {
-                        /* ignore */
-                      }
-                    }}
-                  >
-                    Mark all read
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button type="button" className="text-xs font-medium text-slate-500 transition hover:text-indigo-700" onClick={() => setNotifOpen(false)}>
+                      View all
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-medium text-indigo-700 hover:underline"
+                      onClick={async () => {
+                        try {
+                          const res = await apiMarkAllNotificationsRead()
+                          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+                          setUnreadNotifs(res?.updated || 0)
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  </div>
                 </div>
                 <div className="max-h-80 overflow-y-auto">
-                  {notifications.length === 0 ? (
+                  {notifLoading ? (
+                    <div className="flex items-center justify-center px-4 py-6">
+                      <p className="text-sm text-slate-500">Loading notifications…</p>
+                    </div>
+                  ) : notifError ? (
+                    <div className="px-4 py-6 text-center">
+                      <p className="text-sm text-red-600">{notifError}</p>
+                      <button type="button" className={button} onClick={loadNotifs}>Retry</button>
+                    </div>
+                  ) : notifications.length === 0 ? (
                     <p className="p-4 text-sm text-slate-400">No notifications yet.</p>
                   ) : (
                     notifications.map((n) => (
@@ -557,6 +594,7 @@ export default function App() {
                 </div>
               </div>
             )}
+            </div>
           </div>
           <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800">
             {termLabel(data.term)}

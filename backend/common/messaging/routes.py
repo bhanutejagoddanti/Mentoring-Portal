@@ -102,5 +102,5 @@ def search_users():
         limit = int(request.args.get('limit') or 20)
     except (TypeError, ValueError):
         limit = 20
-    items = messaging_service.search_users(query, role, limit)
+    items = messaging_service.search_users(query, role, limit, exclude_id=(user.get('id') or ''))
     return api_response(items=items, total=len(items), query=query)

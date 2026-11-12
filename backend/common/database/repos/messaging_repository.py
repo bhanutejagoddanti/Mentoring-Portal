@@ -13,7 +13,7 @@ def list_user_conversations(user_id: str) -> list:
     )
     res = res.eq('user_id', user_id)
     res = res.eq('status', 'active')
-    res = res.order('joined_at', ascending=False)
+    res = res.order('joined_at', desc=True)
     return res.execute().data or []
 
 
@@ -106,7 +106,7 @@ def list_messages(conversation_id: str) -> list:
     res = sb.table('direct_messages')
     res = res.select('*')
     res = res.eq('conversation_id', conversation_id)
-    res = res.order('created_at', ascending=True)
+    res = res.order('created_at', desc=False)
     return res.execute().data or []
 
 
@@ -147,7 +147,7 @@ def set_message_reactions(conversation_id: str, message_id: str, reactions: list
     return (res.data or [{}])[0] if res.data else {}
 
 
-def search_users(query: str, role: str | None = None, limit: int = 20) -> list:
+def search_users(query: str, role: str | None = None, limit: int = 20, exclude_id: str | None = None) -> list:
     """Search user profiles by name/email for starting direct conversations."""
     res = sb.table('user_profiles')
     res = res.select('id, name, email, role, approved, active, avatar_url')
@@ -156,6 +156,8 @@ def search_users(query: str, role: str | None = None, limit: int = 20) -> list:
     if role:
         res = res.eq('role', role)
     res = res.eq('active', True)
-    res = res.order('name', ascending=True)
+    if exclude_id:
+        res = res.neq('id', exclude_id)
+    res = res.order('name', desc=False)
     res = res.limit(limit)
     return res.execute().data or []

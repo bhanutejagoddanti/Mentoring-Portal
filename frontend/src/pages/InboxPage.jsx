@@ -291,17 +291,16 @@ export default function InboxPage({ user, focusConversationId, onConsumeFocus })
 
   return (
     <>
-      <Title>Inbox</Title>
-      {mobileChatOpen && activeId ? (
+      <Title>Chat</Title>
+      {mobileChatOpen && activeId && (
         <div className="flex min-h-[520px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card md:hidden" style={{ height: 'calc(100vh - 230px)' }}>
           {ChatWindow()}
         </div>
-      ) : (
-        <div className="flex min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card md:h-[640px] md:flex-row">
-          {ConversationList()}
-          {activeId ? chatPanel : null}
-        </div>
       )}
+      <div className={`${mobileChatOpen && activeId ? 'hidden md:flex' : 'flex'} min-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card md:h-[640px] md:flex-row`}>
+        {ConversationList()}
+        {activeId ? chatPanel : null}
+      </div>
     </>
   )
 }

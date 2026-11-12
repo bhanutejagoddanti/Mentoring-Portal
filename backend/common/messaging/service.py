@@ -230,7 +230,7 @@ def toggle_reaction(conversation_id: str, message_id: str, user: dict, reaction:
     return repo.set_message_reactions(conversation_id, message_id, reactions)
 
 
-def search_users(query: str, role: str | None = None, limit: int = 20) -> list:
+def search_users(query: str, role: str | None = None, limit: int = 20, exclude_id: str | None = None) -> list:
     """Search users by name/email for starting direct conversations."""
     q = (query or '').strip()
-    return repo.search_users(q, role, limit)
+    return repo.search_users(q, role, limit, exclude_id=exclude_id)
