@@ -367,6 +367,7 @@ export default function App() {
       if (page === 'Home') return <StudentHome data={data} user={user} onMentor={setSelectedMentor} />
       if (page === 'Profile')
         return <StudentProfile user={user} data={data} profile={data.profiles?.[user.email]} onSave={saveProfile} onMessage={startDm} />
+      if (page === 'Chat') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'My Mentorship')
         return <MyMentorship user={user} data={data} updateData={setData} onChat={sendChat} />
@@ -381,6 +382,7 @@ export default function App() {
         return (
           <MyStudents user={user} data={data} updateData={setData} onChat={sendChat} setStatus={setRequestStatus} />
         )
+      if (page === 'Chat') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Profile') return <MentorProfile user={user} data={data} updateData={setData} />
       if (page === 'Communities')
@@ -395,6 +397,7 @@ export default function App() {
         return <AdminStudents data={data} onBlacklist={blacklistAccount} onActivate={activateAccount} />
       if (page === 'Mentors')
         return <AdminMentors data={data} onBlacklist={blacklistAccount} onActivate={activateAccount} />
+      if (page === 'Chat') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Inbox') return <InboxPage user={user} focusConversationId={inboxFocusId} onConsumeFocus={() => setInboxFocusId(null)} />
       if (page === 'Communities')
         return <CommunityPage user={user} data={data} updateData={setData} onMessage={startDm} />

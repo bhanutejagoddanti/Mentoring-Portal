@@ -139,13 +139,8 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
 
   function messageSender(m) {
     setSenderProfile(null)
-    const senderId = m?.sender_id ? String(m.sender_id) : ''
-    const meId = user?.id ? String(user.id) : ''
-    const senderName = String(m?.sender_name || '')
-    const selfName = String(user?.name || '')
-    const isSelf = (senderId && meId && senderId === meId) || (!senderId && senderName === selfName)
-    if (!onMessage || isSelf) return
-    onMessage({ name: senderName, role: m?.sender_role })
+    if (!onMessage) return
+    onMessage({ name: String(m?.sender_name || ''), role: m?.sender_role })
   }
 
   function syncMembership(comm, joined) {

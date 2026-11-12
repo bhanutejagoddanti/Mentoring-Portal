@@ -91,7 +91,7 @@ def create_direct_conversation(user: dict, other_user: dict) -> dict:
     """Find existing DM between two users or create a new one."""
     user_id = user.get('id') or ''
     other_id = other_user.get('id') or ''
-    if not user_id or not other_id or user_id == other_id:
+    if not user_id or not other_id:
         return {'error': 'Invalid conversation participants', 'status': 400}
     existing = repo.find_direct_conversation(user_id, other_id)
     if existing and existing.get('id'):
