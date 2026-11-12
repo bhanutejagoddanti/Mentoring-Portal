@@ -165,7 +165,7 @@ $$ language sql security definer;
 
 drop policy if exists "help_requests_select_own_or_admin" on public.help_requests;
 create policy "help_requests_select_own_or_admin" on public.help_requests
-  for select using (requester_or_owner: user_id = auth.uid() or public.is_admin(auth.uid()));
+  for select using (user_id = auth.uid() or public.is_admin(auth.uid()));
 
 drop policy if exists "help_requests_insert_own" on public.help_requests;
 create policy "help_requests_insert_own" on public.help_requests

@@ -39,7 +39,10 @@ create index if not exists idx_mentor_vectors_metadata
   on public.mentor_vectors using gin (extracted_metadata);
 
 -- Semantic search RPC (RAG retrieval): nearest mentors to a query embedding
-create or replace function public.match_mentors(
+-- (drop prior overloads first, then create the canonical signature used by the backend)
+drop function if exists public.match_mentors(vector(1536), integer);
+drop function if exists public.match_mentors(vector(1536), float8, integer);
+create function public.match_mentors(
   query_embedding vector(1536),
   match_count int default 5
 ) returns table (
