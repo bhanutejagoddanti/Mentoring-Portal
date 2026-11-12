@@ -130,11 +130,21 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
     setSenderProfile(null)
   }
 
+  function isOwnMessage(m) {
+    const senderId = m?.sender_id ? String(m.sender_id) : ''
+    const meId = user?.id ? String(user.id) : ''
+    if (senderId && meId) return senderId === meId
+    return String(m?.sender_name || '') === String(user?.name || '')
+  }
+
   function messageSender(m) {
     setSenderProfile(null)
+    const senderId = m?.sender_id ? String(m.sender_id) : ''
+    const meId = user?.id ? String(user.id) : ''
     const senderName = String(m?.sender_name || '')
     const selfName = String(user?.name || '')
-    if (!onMessage || senderName === selfName) return
+    const isSelf = (senderId && meId && senderId === meId) || (!senderId && senderName === selfName)
+    if (!onMessage || isSelf) return
     onMessage({ name: senderName, role: m?.sender_role })
   }
 
@@ -482,19 +492,19 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
                     messages.map((m) => (
                       <div
                         key={m.id}
-                        className={`flex max-w-[85%] ${m.sender_name === user.name ? 'self-end' : 'self-start'}`}
+                        className={`flex max-w-[85%] ${isOwnMessage(m) ? 'self-end' : 'self-start'}`}
                       >
                         <button
                           type="button"
                           onClick={() => openSenderProfile(m)}
-                          className={`grid size-8 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white ${m.sender_name === user.name ? 'bg-indigo-500' : 'bg-slate-400'}`}
+                          className={`grid size-8 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white ${isOwnMessage(m) ? 'bg-indigo-500' : 'bg-slate-400'}`}
                           title={`View ${m.sender_name}`}
                         >
                           {String(m.sender_name || '?').split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()}
                         </button>
                         <div
                           className={`rounded-2xl p-2.5 text-sm border ${
-                            m.sender_name === user.name
+                            isOwnMessage(m)
                               ? 'bg-indigo-600 text-white border-indigo-600'
                               : 'bg-white text-slate-800 border-slate-200'
                           }`}
@@ -525,7 +535,7 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
                               ))}
                             </div>
                           )}
-                          {m.sender_name !== user.name && (
+                          {!isOwnMessage(m) && (
                             <div className="mt-1 text-right">
                               <button
                                 onClick={() => setReportModal(m)}
