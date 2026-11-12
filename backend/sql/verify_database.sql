@@ -87,6 +87,32 @@ begin
     where table_schema = 'public' and table_name = 'mentor_vectors' and column_name = 'embedding'
   ) then raise exception 'Missing column: public.mentor_vectors.embedding'; end if;
 
+  -- Migration 001-intended columns on existing (base-created) tables
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'help_requests' and column_name = 'priority'
+  ) then raise exception 'Missing column: public.help_requests.priority'; end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'help_requests' and column_name = 'category'
+  ) then raise exception 'Missing column: public.help_requests.category'; end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'help_requests' and column_name = 'assigned_admin'
+  ) then raise exception 'Missing column: public.help_requests.assigned_admin'; end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'help_requests' and column_name = 'confidential'
+  ) then raise exception 'Missing column: public.help_requests.confidential'; end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'intervention_logs' and column_name = 'performed_by'
+  ) then raise exception 'Missing column: public.intervention_logs.performed_by'; end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'intervention_logs' and column_name = 'help_request_id'
+  ) then raise exception 'Missing column: public.intervention_logs.help_request_id'; end if;
+
   -- RLS must be enabled on the messaging tables
   if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'conversations' and rowsecurity) then
     raise exception 'RLS is not enabled on public.conversations';

@@ -40,3 +40,4 @@ Run in this exact order against the Supabase project (`gbccbqvadlhfgfhzztok.supa
 - 2026-11: Migration 003 fixed (split `DROP POLICY`/`CREATE POLICY`; DM insert policy uses `new.conversation_id`).
 - 2026-11: Migration 001 fixed (`help_requests` policy expression was syntactically invalid).
 - 2026-11: Migration 002 fixed (`match_mentors` re-declaration conflict resolved with drop+create).
+- 2026-11: Migration 001 extended with backward-compatible `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for `help_requests` and `intervention_logs` columns missing from the base definitions (fixes `ERROR 42703: column "priority" does not exist`).

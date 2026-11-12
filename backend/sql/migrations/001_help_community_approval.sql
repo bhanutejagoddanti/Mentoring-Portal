@@ -112,6 +112,40 @@ create table if not exists public.community_request_reviews (
   created_at timestamptz not null default now()
 );
 
+-- -----------------------------------------------------------------------------
+-- Backward-compatible column additions (no-op when columns already exist).
+-- The base schema may have created older versions of these tables; add any
+-- migration-intended columns before indexes / policies reference them.
+-- -----------------------------------------------------------------------------
+alter table public.help_requests add column if not exists user_id uuid references public.user_profiles(id) on delete set null;
+alter table public.help_requests add column if not exists user_name text;
+alter table public.help_requests add column if not exists user_email text;
+alter table public.help_requests add column if not exists role text check (role in ('student', 'mentor', 'admin'));
+alter table public.help_requests add column if not exists ticket_type text not null;
+alter table public.help_requests add column if not exists category text;
+alter table public.help_requests add column if not exists priority text not null default 'Medium' check (priority in ('Low', 'Medium', 'High', 'Urgent'));
+alter table public.help_requests add column if not exists description text not null;
+alter table public.help_requests add column if not exists current_mentor text;
+alter table public.help_requests add column if not exists reason_change text;
+alter table public.help_requests add column if not exists urgency text;
+alter table public.help_requests add column if not exists student_involved text;
+alter table public.help_requests add column if not exists incident_category text;
+alter table public.help_requests add column if not exists incident_date date;
+alter table public.help_requests add column if not exists confidential boolean not null default false;
+alter table public.help_requests add column if not exists status text not null default 'Submitted' check (status in ('Submitted','Under Review','Additional Information Required','Approved','Rejected','Resolved','Closed'));
+alter table public.help_requests add column if not exists assigned_admin uuid references public.user_profiles(id) on delete set null;
+alter table public.help_requests add column if not exists assigned_admin_name text;
+alter table public.help_requests add column if not exists decision text;
+alter table public.help_requests add column if not exists resolution_notes text;
+
+alter table public.intervention_logs add column if not exists legacy_ticket_id bigint;
+alter table public.intervention_logs add column if not exists action text;
+alter table public.intervention_logs add column if not exists performed_by uuid references public.user_profiles(id) on delete set null;
+alter table public.intervention_logs add column if not exists performed_by_name text;
+alter table public.intervention_logs add column if not exists decision text;
+alter table public.intervention_logs add column if not exists resolution text;
+alter table public.intervention_logs add column if not exists performed_at timestamptz not null default now();
+
 -- Index for admin filtering
 create index if not exists idx_help_requests_status on public.help_requests(status);
 create index if not exists idx_help_requests_category on public.help_requests(ticket_type);
