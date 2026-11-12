@@ -513,6 +513,9 @@ export default function App() {
             <b className="text-slate-900">{page}</b>
           </div>
           <div className="flex items-center gap-3">
+            <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800">
+              {termLabel(data.term)}
+            </span>
             <div className="relative" ref={notifRef}>
             <button
               type="button"
@@ -596,9 +599,6 @@ export default function App() {
             )}
             </div>
           </div>
-          <span className="rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-800">
-            {termLabel(data.term)}
-          </span>
         </header>
         <main className="w-full flex-1 px-5 py-6 lg:px-8 lg:py-8">{pageContent()}</main>
       </div>
