@@ -492,7 +492,7 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
                     messages.map((m) => (
                       <div
                         key={m.id}
-                        className={`flex max-w-[85%] ${isOwnMessage(m) ? 'self-end' : 'self-start'}`}
+                        className={`flex max-w-[85%] ${isOwnMessage(m) ? 'justify-end' : 'justify-start'}`}
                       >
                         <button
                           type="button"
