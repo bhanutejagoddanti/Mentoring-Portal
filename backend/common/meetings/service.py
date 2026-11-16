@@ -1,11 +1,17 @@
 """Common meeting service (shared scheduling utilities)."""
 from __future__ import annotations
 
-from common.database.repos.mentorship_repository import insert_meeting
+import time
 
 
 def create_meeting(mentor_name: str, student_name: str, scheduled_at: str) -> dict:
-    """Create a mentorship meeting record."""
-    meeting = {'mentor': mentor_name, 'student': student_name, 'scheduled_at': scheduled_at, 'status': 'Scheduled'}
-    insert_meeting(meeting)
+    """Build a mentorship meeting record (persisted by the shared route)."""
+    meeting = {
+        'id': int(time.time() * 1000),
+        'mentor': mentor_name,
+        'student': student_name,
+        'scheduled_at': scheduled_at,
+        'date': scheduled_at,
+        'status': 'Scheduled',
+    }
     return {'status': 'created', 'meeting': meeting}

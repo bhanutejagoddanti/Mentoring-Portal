@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Panel, Title, Chip, input, button, outline } from '../ui'
 import { apiRequest, apiSendCommunityMessage, apiReactCommunity } from '../api'
 
+const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
 const defaultCommunities = [
   {
     id: 1,
@@ -72,6 +74,7 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
   const [communityRequests, setCommunityRequests] = useState([])
   const [approveModerators, setApproveModerators] = useState({})
   const [senderProfile, setSenderProfile] = useState(null)
+  const [reactFor, setReactFor] = useState(null)
 
   useEffect(() => {
     loadCommunities()
@@ -190,7 +193,7 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
     if (!activeCommunity) return
     try {
       const res = await apiReactCommunity(activeCommunity.id, m.id, reaction)
-      const reactions = res?.message?.reactions || (m.reactions || [])
+      const reactions = Array.isArray(res?.reactions) ? res.reactions : (m.reactions || [])
       setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, reactions } : x)))
     } catch (err) {
       console.warn('Reaction failed:', err)
@@ -516,16 +519,48 @@ export default function CommunityPage({ user, data, updateData, onMessage }) {
                             </div>
                           )}
                           <p>{m.content}</p>
-                          {m.reactions && m.reactions.length > 0 && (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {m.reactions.map((r, i) => (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {(m.reactions || []).map((r, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                onClick={() => handleToggleReaction(m, r.reaction)}
+                                title={`React with ${r.reaction}`}
+                                className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-800 transition hover:scale-105"
+                              >
+                                {r.reaction}
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setReactFor(reactFor === m.id ? null : m.id)}
+                              title="Add a reaction"
+                              className={`rounded-full border px-2 py-0.5 text-[10px] ${isOwnMessage(m) ? 'border-white/60 text-white' : 'border-slate-300 text-slate-500'}`}
+                            >
+                              ＋
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setReplyTo(m)}
+                              title="Reply to this message"
+                              className={`rounded-full border px-2 py-0.5 text-[10px] ${isOwnMessage(m) ? 'border-white/60 text-white' : 'border-slate-300 text-slate-500'}`}
+                            >
+                              ↩
+                            </button>
+                          </div>
+                          {reactFor === m.id && (
+                            <div className="mt-1 flex flex-wrap gap-1 rounded-lg bg-white p-1 shadow">
+                              {EMOJIS.map((emoji) => (
                                 <button
-                                  key={i}
+                                  key={emoji}
                                   type="button"
-                                  onClick={() => handleToggleReaction(m, r.reaction)}
-                                  className="rounded-full border px-2 py-0.5 text-xs transition hover:scale-105"
+                                  onClick={() => {
+                                    handleToggleReaction(m, emoji)
+                                    setReactFor(null)
+                                  }}
+                                  className="rounded px-1 text-base hover:bg-slate-100"
                                 >
-                                  {r.reaction}
+                                  {emoji}
                                 </button>
                               ))}
                             </div>

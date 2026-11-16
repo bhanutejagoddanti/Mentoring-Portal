@@ -69,4 +69,13 @@ def register():
             'linkedin': data.get('linkedin') or '', 'approved': False, 'active': True,
         })
         write_state(state)
+    elif role == 'student':
+        roster = state.setdefault('students', [])
+        if not any((s.get('email') or '').lower() == email for s in roster):
+            roster.append({
+                'name': name, 'email': email,
+                'program': data.get('program') or 'BS Data Science',
+                'mentor': '', 'feedback': '—', 'active': True,
+            })
+            write_state(state)
     return api_response({'message': f'{role.capitalize()} registration submitted successfully. Mentor accounts await IIC Admin approval.'}, status=201)

@@ -295,6 +295,53 @@ begin
       and policyname = 'notifications_own_update'
   ) then raise exception 'Missing policy: public.notifications.notifications_own_update'; end if;
 
+  -- Ensure notification insertion is backend-only for authenticated clients.
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'notifications'
+      and policyname = 'notifications_own_insert'
+      and coalesce(with_check, '') <> 'false'
+  ) then
+    raise exception 'Unsafe notifications_own_insert policy: expected WITH CHECK (false)';
+  end if;
+
+  -- Ensure direct client membership insertion is denied; trusted backend uses service role.
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'conversation_participants'
+      and policyname = 'conversation_participants_insert_own'
+      and coalesce(with_check, '') <> 'false'
+  ) then
+    raise exception 'Unsafe conversation_participants_insert_own policy: expected WITH CHECK (false)';
+  end if;
+
+  -- Detect legacy permissive policies accidentally granted to PUBLIC on server-managed tables.
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename in ('mentor_profiles','mentor_vectors','mentor_search_logs',
+                        'help_requests','help_request_messages','help_request_attachments',
+                        'intervention_logs','community_requests','community_request_reviews')
+      and 'public' = any(roles)
+      and cmd = 'ALL'
+      and coalesce(qual, '') = 'true'
+      and coalesce(with_check, '') = 'true'
+  ) then
+    raise exception 'Unsafe PUBLIC ALL policy found on server-managed tables';
+  end if;
+
+  -- No PUBLIC or anon policies on private messaging tables.
+  if exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename in ('conversations', 'conversation_participants', 'direct_messages', 'message_reads')
+      and ('public' = any(roles) or 'anon' = any(roles))
+  ) then
+    raise exception 'Unsafe PUBLIC/anon policy found on private messaging tables';
+  end if;
+
   -- No anon access on private messaging tables
   if exists (
     select 1 from pg_policies
@@ -305,10 +352,24 @@ begin
     raise exception 'Unsafe anon policy found on private messaging tables';
   end if;
 
-  -- Required extensions
-  if to_regextension('vector') is null then raise exception 'Missing extension: vector'; end if;
-  if to_regextension('pgcrypto') is null then raise exception 'Missing extension: pgcrypto'; end if;
-  if to_regextension('uuid-ossp') is null then raise exception 'Missing extension: uuid-ossp'; end if;
+-- Required extension checks
+IF NOT EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname = 'vector'
+) THEN
+    RAISE EXCEPTION 'Missing extension: vector';
+END IF;
+
+IF NOT EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto'
+) THEN
+    RAISE EXCEPTION 'Missing extension: pgcrypto';
+END IF;
+
+IF NOT EXISTS (
+    SELECT 1 FROM pg_extension WHERE extname = 'uuid-ossp'
+) THEN
+    RAISE EXCEPTION 'Missing extension: uuid-ossp';
+END IF;
 
   raise notice 'DATABASE VERIFICATION OK: all required tables, columns, FKs, indexes, functions, RLS flags and policies are present.';
 end $$;

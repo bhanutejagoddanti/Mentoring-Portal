@@ -62,3 +62,24 @@ def write_state_route():
         return error_response('State must be a JSON object', 400)
     save_state(_preserve_vectors(payload))
     return api_response({'message': 'State synchronized with Supabase PostgreSQL'})
+
+
+@bp.patch('/state')
+@login_required
+def patch_state_route():
+    """Merge a partial state update into the latest stored state.
+
+    The SPA edits a few client-owned keys (profiles, tasks, term settings,
+    mentor profile). Sending the whole cached snapshot also re-sends stale
+    copies of API-managed collections (messages, reports, tickets, meetings)
+    and can erase data written by other endpoints. The client therefore sends
+    only the keys it actually changed.
+    """
+    patch = request.get_json()
+    if not isinstance(patch, dict):
+        return error_response('State patch must be a JSON object', 400)
+    state = get_state()
+    state.update(patch)
+    state = _preserve_vectors(state)
+    save_state(state)
+    return api_response(state)

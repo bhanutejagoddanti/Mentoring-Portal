@@ -132,21 +132,6 @@ def insert_message(conversation_id: str, sender_id: str, sender_name: str, sende
     return (res.data or [{}])[0] if res.data else {}
 
 
-def set_message_reactions(conversation_id: str, message_id: str, reactions: list) -> dict:
-    """Replace the reaction set on a direct message."""
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc).isoformat()
-    res = (
-        sb.table('direct_messages')
-        .update({'reactions': reactions, 'updated_at': now})
-        .eq('id', message_id)
-        .eq('conversation_id', conversation_id)
-        .execute()
-    )
-    return (res.data or [{}])[0] if res.data else {}
-
-
 def search_users(query: str, role: str | None = None, limit: int = 20, exclude_id: str | None = None) -> list:
     """Search user profiles by name/email for starting direct conversations."""
     res = sb.table('user_profiles')

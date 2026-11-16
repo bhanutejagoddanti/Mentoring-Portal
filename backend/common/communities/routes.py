@@ -109,7 +109,10 @@ def report_community_content(cid: int):
     reason = (data.get('reason') or '').strip()
     if not reason:
         return error_response('Reason for report is required', 400)
-    return api_response(report_content(cid, current_user(), reason, data.get('message_id')), status=201)
+    result = report_content(cid, current_user(), reason, data.get('message_id'))
+    if result.get('error'):
+        return error_response(result['error'], result.get('status', 400))
+    return api_response(result, status=201)
 
 
 # --- creation requests (approval workflow owned by admin/community_approvals service) ---

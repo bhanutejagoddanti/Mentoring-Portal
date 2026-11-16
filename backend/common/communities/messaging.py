@@ -13,10 +13,20 @@ def list_messages(cid: int) -> list:
 
 
 def send_message(cid: int, user: dict, content: str, reply_to_id=None, attachments: list | None = None) -> dict:
-    """Send a community message (optionally as a reply to another message)."""
+    """Send a community message (members only; admins may moderate without joining)."""
     content = (content or '').strip()
     if not content:
         return {'error': 'Message content is required', 'status': 400}
+    state = get_state()
+    community = next((c for c in state.get('communities') or [] if int(c.get('id', -1)) == cid), None)
+    if not community:
+        return {'error': 'Community not found', 'status': 404}
+    is_member = any(
+        m.get('user_id') == (user.get('id') or '') and m.get('status') == 'active'
+        for m in community.get('members') or []
+    )
+    if not is_member and user.get('role') != 'admin':
+        return {'error': 'Join this community before posting messages', 'status': 403}
     import time
     msg = {
         'id': int(time.time() * 1000),
@@ -28,7 +38,6 @@ def send_message(cid: int, user: dict, content: str, reply_to_id=None, attachmen
         'attachments': attachments or [],
         'created_at': new_time_str(),
     }
-    state = get_state()
     state.setdefault('community_messages', []).append(msg)
     save_state(state)
     return msg
@@ -68,14 +77,35 @@ def list_members(cid: int) -> list:
 
 
 def report_content(cid: int, user: dict, reason: str, message_id=None) -> dict:
-    """Queue a content report for admin moderation."""
-    from extensions import sb
+    """Queue a content report for admin moderation.
 
-    sb.table('content_reports').insert({
-        'reported_by': user.get('id'),
+    Communities and their messages live in the synced app_state (integer ids),
+    so reports are stored alongside them. The legacy Supabase `content_reports`
+    table uses UUID foreign keys and cannot reference app_state ids.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    state = get_state()
+    community = next((c for c in state.get('communities') or [] if int(c.get('id', -1)) == cid), None)
+    if not community:
+        return {'error': 'Community not found', 'status': 404}
+    report = {
+        'id': str(uuid.uuid4()),
+        'reported_by': user.get('id') or '',
+        'reporter_name': user.get('name') or '',
         'community_id': cid,
+        'community_name': community.get('name') or '',
         'message_id': message_id,
         'reason': reason,
         'status': 'Pending',
-    }).execute()
-    return {'message': 'Report received and queued for admin moderation.', 'status': 'queued'}
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+    state.setdefault('content_reports', []).append(report)
+    save_state(state)
+    return {
+        'message': 'Report received and queued for admin moderation.',
+        'status': 'queued',
+        'report_id': report['id'],
+        'report': report,
+    }

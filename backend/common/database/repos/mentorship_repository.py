@@ -18,5 +18,12 @@ def insert_request(request: dict) -> None:
 
 
 def insert_meeting(meeting: dict) -> None:
-    """Persist a mentorship meeting record."""
-    sb.table('meetings').insert(meeting).execute()
+    """Persist a mentorship meeting record (maps state keys to table columns)."""
+    sb.table('meetings').insert({
+        'student_name': meeting.get('student'),
+        'mentor_name': meeting.get('mentor'),
+        'scheduled_at': meeting.get('scheduled_at') or meeting.get('date'),
+        'status': meeting.get('status', 'Scheduled'),
+        'meeting_link': meeting.get('meeting_link'),
+        'notes': meeting.get('notes'),
+    }).execute()

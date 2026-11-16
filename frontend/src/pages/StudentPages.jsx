@@ -425,19 +425,24 @@ export function HistoryPage({ role, user, data }) {
       note: `${messages} chat messages`,
     }
   })
+  const history = [...records, ...data.history.filter((item) => item.role === role)]
   return (
     <>
       <Title>History</Title>
       <Panel title="Previous terms">
-        {[...records, ...data.history.filter((item) => item.role === role)].map((item, index) => (
-          <div key={`${item.term}-${item.person}-${index}`} className="border-t py-3 text-sm">
-            <b>{item.term}</b>
-            <p className="mt-1">
-              {role === 'student' ? 'Mentor' : 'Student'}: {item.person} · {item.meetings} meetings
-            </p>
-            <p className="mt-1 text-slate-500">{item.note}</p>
-          </div>
-        ))}
+        {history.length ? (
+          history.map((item, index) => (
+            <div key={`${item.term}-${item.person}-${index}`} className="border-t py-3 text-sm">
+              <b>{item.term}</b>
+              <p className="mt-1">
+                {role === 'student' ? 'Mentor' : 'Student'}: {item.person} · {item.meetings} meetings
+              </p>
+              <p className="mt-1 text-slate-500">{item.note}</p>
+            </div>
+          ))
+        ) : (
+          <p className="py-3 text-sm text-slate-500">No previous mentorship terms yet.</p>
+        )}
       </Panel>
     </>
   )

@@ -37,6 +37,7 @@ export default function InboxPage({ user, focusConversationId, onConsumeFocus })
   const [replyTo, setReplyTo] = useState(null)
   const [mobileChatOpen, setMobileChatOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [reactFor, setReactFor] = useState(null)
 
   const loadInbox = useCallback(async () => {
     try {
@@ -91,6 +92,29 @@ export default function InboxPage({ user, focusConversationId, onConsumeFocus })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusConversationId])
 
+  // Keep the open thread fresh (incoming messages + peer read receipts).
+  useEffect(() => {
+    if (!activeId) return undefined
+    const timer = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return
+      try {
+        const res = await apiGetConversation(activeId)
+        if (!res?.conversation) return
+        setDetail((prev) => {
+          const prevLast = (prev?.messages || []).slice(-1)[0]?.id
+          const nextLast = (res.messages || []).slice(-1)[0]?.id
+          if (prev && prevLast === nextLast) return { ...prev, other: res.other, conversation: res.conversation }
+          return res
+        })
+        const lastId = (res.messages || []).slice(-1)[0]?.id
+        if (lastId) await apiMarkRead(activeId, lastId)
+      } catch {
+        // transient network errors are reported by the next poll/inbox refresh
+      }
+    }, 8000)
+    return () => clearInterval(timer)
+  }, [activeId])
+
   async function sendMessage(e) {
     e.preventDefault()
     if (!text.trim() || !activeId) return
@@ -126,19 +150,28 @@ export default function InboxPage({ user, focusConversationId, onConsumeFocus })
     }
   }
 
-  async function toggleReaction(message) {
+  async function toggleReaction(message, reaction = '👍') {
     if (!activeId || !message?.id) return
-    const already = (message.reactions || []).some((r) => r.user_id === user.id && r.reaction === '👍')
-    const finalReaction = already ? null : '👍'
+    const mine = (message.reactions || []).some((r) => r.user_id === user.id && r.reaction === reaction)
     try {
-      const res = await apiReactDm(activeId, message.id, finalReaction || '👍')
-      const reactions = finalReaction
-        ? res?.message?.reactions || [...(message.reactions || []), { user_id: user.id, user_name: user.name, reaction: finalReaction }]
-        : (message.reactions || []).filter((r) => !(r.user_id === user.id && r.reaction === '👍'))
+      const res = await apiReactDm(activeId, message.id, reaction)
+      const reactions = Array.isArray(res?.reactions)
+        ? res.reactions
+        : mine
+          ? (message.reactions || []).filter((r) => !(r.user_id === user.id && r.reaction === reaction))
+          : [...(message.reactions || []), { user_id: user.id, user_name: user.name, reaction }]
       setDetail((d) => ({ ...d, messages: (d?.messages || []).map((m) => (m.id === message.id ? { ...m, reactions } : m)) }))
     } catch (err) {
       console.warn('Reaction failed', err)
     }
+  }
+
+  function readByPeer(message) {
+    const lastRead = detail?.other?.last_read_at
+    if (!lastRead) return false
+    const readAt = new Date(lastRead).getTime()
+    const sentAt = new Date(message.created_at).getTime()
+    return Number.isFinite(readAt) && Number.isFinite(sentAt) && readAt >= sentAt
   }
 
   const messages = detail?.messages || []
@@ -239,18 +272,50 @@ export default function InboxPage({ user, focusConversationId, onConsumeFocus })
                     <p>{m.content}</p>
                     <div className="mt-1 flex items-center justify-between gap-2 text-[10px] opacity-70">
                       <span>{fmtTime(m.created_at)}</span>
-                      {mine && <span>✓✓ Read</span>}
+                      {mine && <span>{readByPeer(m) ? '✓✓ Read' : '✓ Sent'}</span>}
                     </div>
-                    {(m.reactions || []).length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {(m.reactions || []).map((r, i) => (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {(m.reactions || []).map((r, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => toggleReaction(m, r.reaction)}
+                          title={`React with ${r.reaction}`}
+                          className={`rounded-full border px-2 py-0.5 text-xs transition ${r.user_id === user.id ? 'border-indigo-400 bg-indigo-50 text-slate-800' : 'border-slate-200 bg-white text-slate-800'}`}
+                        >
+                          {r.reaction}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setReactFor(reactFor === m.id ? null : m.id)}
+                        title="Add a reaction"
+                        className={`rounded-full border px-2 py-0.5 text-[10px] ${mine ? 'border-indigo-400 text-white' : 'border-slate-300 text-slate-500'}`}
+                      >
+                        ＋
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReplyTo(m)}
+                        title="Reply to this message"
+                        className={`rounded-full border px-2 py-0.5 text-[10px] ${mine ? 'border-indigo-400 text-white' : 'border-slate-300 text-slate-500'}`}
+                      >
+                        ↩
+                      </button>
+                    </div>
+                    {reactFor === m.id && (
+                      <div className="mt-1 flex flex-wrap gap-1 rounded-lg bg-white p-1 shadow">
+                        {EMOJIS.map((emoji) => (
                           <button
-                            key={i}
+                            key={emoji}
                             type="button"
-                            onClick={() => toggleReaction(m)}
-                            className={`rounded-full border px-2 py-0.5 text-xs transition ${r.user_id === user.id ? 'border-indigo-400 bg-indigo-50' : 'border-slate-200 bg-white'}`}
+                            onClick={() => {
+                              toggleReaction(m, emoji)
+                              setReactFor(null)
+                            }}
+                            className="rounded px-1 text-base hover:bg-slate-100"
                           >
-                            {r.reaction}
+                            {emoji}
                           </button>
                         ))}
                       </div>

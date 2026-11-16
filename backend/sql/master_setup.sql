@@ -839,20 +839,34 @@ alter table public.intervention_logs enable row level security;
 alter table public.community_requests enable row level security;
 alter table public.community_request_reviews enable row level security;
 
--- Permissive service-role full access (backend uses service role key)
+-- The backend uses the Supabase service-role key, which bypasses RLS.
+-- Do NOT create a permissive PUBLIC policy named service_role_all.
+-- Remove any such legacy policy if this migration is rerun.
 do $$
 declare t text;
 begin
   foreach t in array array['help_requests','help_request_messages','help_request_attachments','intervention_logs','community_requests','community_request_reviews'] loop
     execute format('drop policy if exists "service_role_all" on public.%I', t);
-    execute format('create policy "service_role_all" on public.%I for all using (true) with check (true)', t);
   end loop;
 end $$;
 
 -- Authenticated read: requester sees own, admins see all (via is_admin helper if exists, else role check)
-create or replace function public.is_admin(uid uuid) returns boolean as $$
-  select exists (select 1 from public.user_profiles where id = uid and role = 'admin');
-$$ language sql security definer;
+create or replace function public.is_admin(uid uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1
+    from public.user_profiles
+    where id = uid and role = 'admin'
+  );
+$$;
+
+revoke all on function public.is_admin(uuid) from public;
+grant execute on function public.is_admin(uuid) to authenticated, service_role;
 
 drop policy if exists "help_requests_select_own_or_admin" on public.help_requests;
 create policy "help_requests_select_own_or_admin" on public.help_requests
@@ -990,12 +1004,11 @@ alter table public.mentor_profiles enable row level security;
 alter table public.mentor_vectors enable row level security;
 alter table public.mentor_search_logs enable row level security;
 
+-- The backend uses the Supabase service-role key, which bypasses RLS.
+-- A policy without an explicit TO clause applies to PUBLIC and is unsafe here.
 drop policy if exists "service_role_all" on public.mentor_profiles;
-create policy "service_role_all" on public.mentor_profiles for all using (true) with check (true);
 drop policy if exists "service_role_all" on public.mentor_vectors;
-create policy "service_role_all" on public.mentor_vectors for all using (true) with check (true);
 drop policy if exists "service_role_all" on public.mentor_search_logs;
-create policy "service_role_all" on public.mentor_search_logs for all using (true) with check (true);
 
 -- =============================================================================
 -- SECTION 03_MIGRATION: backend/sql/migrations/003_communication.sql
@@ -1108,13 +1121,13 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
-  select auth.uid() is not null and exists (
+  select (select auth.uid()) is not null and exists (
     select 1
     from public.conversation_participants cp
     where cp.conversation_id = p_conversation_id
-      and cp.user_id = auth.uid()
+      and cp.user_id = (select auth.uid())
       and cp.status = 'active'
   );
 $$;
@@ -1124,13 +1137,13 @@ returns boolean
 language sql
 stable
 security definer
-set search_path = public
+set search_path = ''
 as $$
-  select exists (
+  select p_user_id = (select auth.uid()) and exists (
     select 1
     from public.conversation_participants cp
     where cp.conversation_id = p_conversation_id
-      and cp.user_id = p_user_id
+      and cp.user_id = (select auth.uid())
       and cp.status = 'active'
       and cp.role in ('owner', 'admin')
   );
@@ -1163,9 +1176,11 @@ create policy "conversation_participants_select_own" on public.conversation_part
   using (user_id = auth.uid());
 
 drop policy if exists "conversation_participants_insert_own" on public.conversation_participants;
+-- Membership is created only by trusted backend/service-role code.
+-- Keep the named policy for verification, but deny direct client inserts.
 create policy "conversation_participants_insert_own" on public.conversation_participants
   for insert to authenticated
-  with check (user_id = auth.uid());
+  with check (false);
 
 drop policy if exists "conversation_participants_update_admin" on public.conversation_participants;
 create policy "conversation_participants_update_admin" on public.conversation_participants
@@ -1179,27 +1194,14 @@ create policy "conversation_participants_update_admin" on public.conversation_pa
 drop policy if exists "direct_messages_participant_select" on public.direct_messages;
 create policy "direct_messages_participant_select" on public.direct_messages
   for select to authenticated
-  using (
-    exists (
-      select 1
-      from public.conversation_participants cp
-      where cp.conversation_id = direct_messages.conversation_id
-        and cp.user_id = auth.uid()
-        and cp.status = 'active'
-    )
-  );
+  using (public.is_active_conversation_participant(conversation_id));
 
 drop policy if exists "direct_messages_participant_insert" on public.direct_messages;
 create policy "direct_messages_participant_insert" on public.direct_messages
   for insert to authenticated
   with check (
-    exists (
-      select 1
-      from public.conversation_participants cp
-      where cp.conversation_id = new.conversation_id
-        and cp.user_id = auth.uid()
-        and cp.status = 'active'
-    )
+    sender_id = (select auth.uid())
+    and public.is_active_conversation_participant(conversation_id)
   );
 
 -- -----------------------------------------------------------------------------
@@ -1208,18 +1210,18 @@ create policy "direct_messages_participant_insert" on public.direct_messages
 drop policy if exists "message_reads_participant_select" on public.message_reads;
 create policy "message_reads_participant_select" on public.message_reads
   for select to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()) and public.is_active_conversation_participant(conversation_id));
 
 drop policy if exists "message_reads_participant_insert" on public.message_reads;
 create policy "message_reads_participant_insert" on public.message_reads
   for insert to authenticated
-  with check (user_id = auth.uid());
+  with check (user_id = (select auth.uid()) and public.is_active_conversation_participant(conversation_id));
 
 drop policy if exists "message_reads_participant_update" on public.message_reads;
 create policy "message_reads_participant_update" on public.message_reads
   for update to authenticated
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = (select auth.uid()) and public.is_active_conversation_participant(conversation_id))
+  with check (user_id = (select auth.uid()) and public.is_active_conversation_participant(conversation_id));
 
 -- -----------------------------------------------------------------------------
 -- RLS policies: notifications (own rows only; preserve existing behavior)
@@ -1232,9 +1234,10 @@ create policy "notifications_own_select" on public.notifications
 drop policy if exists "notifications_own_insert" on public.notifications;
 create policy "notifications_own_insert" on public.notifications
   for insert to authenticated
-  with check (user_id = auth.uid());
+  with check (false);
 
 drop policy if exists "notifications_own_update" on public.notifications;
 create policy "notifications_own_update" on public.notifications
   for update to authenticated
-  using (user_id = auth.uid());
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));

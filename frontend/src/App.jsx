@@ -34,6 +34,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [selectedMentor, setSelectedMentor] = useState(null)
   const [backendReady, setBackendReady] = useState(false)
+  const syncedState = useRef(null)
   const [inboxFocusId, setInboxFocusId] = useState(null)
   const [notifications, setNotifications] = useState([])
   const [unreadNotifs, setUnreadNotifs] = useState(0)
@@ -94,14 +95,32 @@ export default function App() {
   }, [notifOpen])
 
   useEffect(() => {
-    if (!user || !backendReady) return
-    apiRequest('/state', { method: 'PUT', body: JSON.stringify(data) }).catch((err) => console.error('Backend sync failed:', err))
+    if (!user || !backendReady || !syncedState.current) return
+    // Sync only keys that changed locally. A full-state PUT re-sends stale
+    // copies of API-managed collections and can erase newer server data.
+    const base = syncedState.current
+    const changed = {}
+    let hasChanges = false
+    for (const key of Object.keys(data)) {
+      if (JSON.stringify(data[key]) !== JSON.stringify(base[key])) {
+        changed[key] = data[key]
+        hasChanges = true
+      }
+    }
+    if (!hasChanges) return
+    apiRequest('/state', { method: 'PATCH', body: JSON.stringify(changed) })
+      .then(() => {
+        syncedState.current = { ...syncedState.current, ...changed }
+      })
+      .catch((err) => console.error('Backend sync failed:', err))
   }, [data, user, backendReady])
 
   async function login(account) {
+    setBackendReady(false)
     setUser(account)
     try {
       const serverState = await apiRequest('/state')
+      syncedState.current = serverState || null
       setData((current) => ({ ...current, ...serverState }))
       setBackendReady(true)
     } catch (err) {
@@ -125,8 +144,18 @@ export default function App() {
     }
   }
 
-  function blacklistAccount(name, role) {
+  async function blacklistAccount(name, role) {
     const account = accounts.find((item) => item.name === name && item.role === role)
+    const identifier = account?.email || name
+    try {
+      await apiRequest(`/admin/users/${encodeURIComponent(identifier)}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ active: false }),
+      })
+    } catch (err) {
+      alert('Account could not be blacklisted: ' + err.message)
+      return
+    }
     setData((current) => ({
       ...current,
       blacklisted: current.blacklisted.some((item) => item.name === name && (!item.role || item.role === role))
@@ -135,7 +164,18 @@ export default function App() {
     }))
   }
 
-  function activateAccount(name, role) {
+  async function activateAccount(name, role) {
+    const account = accounts.find((item) => item.name === name && item.role === role)
+    const identifier = account?.email || name
+    try {
+      await apiRequest(`/admin/users/${encodeURIComponent(identifier)}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ active: true }),
+      })
+    } catch (err) {
+      alert('Account could not be activated: ' + err.message)
+      return
+    }
     setData((current) => ({
       ...current,
       blacklisted: current.blacklisted.filter((item) => item.name !== name || (item.role && item.role !== role)),
@@ -496,6 +536,7 @@ export default function App() {
             className="rounded-lg px-2 py-1 text-xs text-slate-400 transition hover:bg-white/10 hover:text-white"
             onClick={async () => {
               await apiLogout()
+              syncedState.current = null
               setUser(null)
               setBackendReady(false)
               setToken('')
@@ -546,9 +587,9 @@ export default function App() {
                       className="text-xs font-medium text-indigo-700 hover:underline"
                       onClick={async () => {
                         try {
-                          const res = await apiMarkAllNotificationsRead()
+                          await apiMarkAllNotificationsRead()
                           setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-                          setUnreadNotifs(res?.updated || 0)
+                          setUnreadNotifs(0)
                         } catch {
                           /* ignore */
                         }
@@ -580,7 +621,7 @@ export default function App() {
                           try {
                             await apiMarkNotificationRead(n.id)
                             setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)))
-                            setUnreadNotifs((prev) => Math.max(0, prev - 1))
+                            if (!n.read) setUnreadNotifs((prev) => Math.max(0, prev - 1))
                           } catch {
                             /* ignore */
                           }

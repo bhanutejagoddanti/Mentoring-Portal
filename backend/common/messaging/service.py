@@ -23,7 +23,23 @@ def _other_participant(conversation_id: str, user_id: str) -> dict | None:
 
 
 def _messages_for(conversation_id: str) -> list:
-    return repo.list_messages(conversation_id)
+    """Messages for a conversation with app_state-backed reactions overlaid."""
+    from common.database.state import get_state
+
+    messages = repo.list_messages(str(conversation_id))
+    reactions = get_state().get('dm_reactions') or []
+    by_message: dict = {}
+    for r in reactions:
+        if str(r.get('conversation_id')) != str(conversation_id):
+            continue
+        by_message.setdefault(str(r.get('message_id')), []).append({
+            'user_id': r.get('user_id') or '',
+            'user_name': r.get('user_name') or '',
+            'reaction': r.get('reaction') or '',
+        })
+    for m in messages:
+        m['reactions'] = by_message.get(str(m.get('id')), [])
+    return messages
 
 
 def _unread_for(user_id: str, last_read_at: str | None, messages: list) -> int:
@@ -212,22 +228,47 @@ def mark_read(conversation_id: str, user: dict, last_read_message_id: str | None
 
 
 def toggle_reaction(conversation_id: str, message_id: str, user: dict, reaction: str) -> dict:
-    """Toggle/add a reaction on a direct message."""
+    """Toggle/add a reaction on a direct message (stored in synced app_state)."""
+    # Flask's <uuid:...> converter passes uuid.UUID objects; normalise for comparisons/SQL.
+    conversation_id = str(conversation_id)
+    message_id = str(message_id)
     conv = repo.get_conversation(conversation_id)
     if not conv:
         return {'error': 'Conversation not found', 'status': 404}
     messages = repo.list_messages(conversation_id)
-    message = next((m for m in messages if m.get('id') == message_id), None)
-    if not message:
+    if not any(str(m.get('id')) == message_id for m in messages):
         return {'error': 'Message not found', 'status': 404}
-    reactions = list(message.get('reactions') or [])
-    mine = [r for r in reactions if r.get('user_id') == (user.get('id') or '')]
-    has = any(r.get('reaction') == reaction for r in mine)
-    if has:
-        reactions = [r for r in reactions if not (r.get('user_id') == (user.get('id') or '') and r.get('reaction') == reaction)]
+
+    from common.database.state import get_state, save_state
+
+    state = get_state()
+    rows = state.setdefault('dm_reactions', [])
+    user_id = user.get('id') or ''
+    existing = next(
+        (r for r in rows if str(r.get('conversation_id')) == conversation_id
+         and str(r.get('message_id')) == message_id
+         and r.get('user_id') == user_id and r.get('reaction') == reaction),
+        None,
+    )
+    if existing:
+        rows.remove(existing)
     else:
-        reactions = reactions + [{'user_id': user.get('id') or '', 'user_name': user.get('name') or '', 'reaction': reaction}]
-    return repo.set_message_reactions(conversation_id, message_id, reactions)
+        from datetime import datetime, timezone
+        rows.append({
+            'conversation_id': conversation_id,
+            'message_id': message_id,
+            'user_id': user_id,
+            'user_name': user.get('name') or '',
+            'reaction': reaction,
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        })
+    save_state(state)
+    public = [
+        {'user_id': r.get('user_id') or '', 'user_name': r.get('user_name') or '', 'reaction': r.get('reaction') or ''}
+        for r in rows
+        if str(r.get('conversation_id')) == conversation_id and str(r.get('message_id')) == message_id
+    ]
+    return {'message_id': message_id, 'reactions': public, 'status': 'updated'}
 
 
 def search_users(query: str, role: str | None = None, limit: int = 20, exclude_id: str | None = None) -> list:
